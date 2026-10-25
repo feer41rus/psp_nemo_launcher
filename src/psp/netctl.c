@@ -2,7 +2,10 @@
 #include "device.h"
 #include "log.h"
 #include "platform.h"
+#include "art.h"
+#include "launch.h"
 #include "usb.h"
+#include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -114,39 +117,51 @@ static void toggle_ftp(App *a) {
 }
 
 // USB: the PC gets the memory stick, so nothing may read or write ms0: until it is back.
+// The PSP keeps the FAT in its own cache: a write that is not flushed before the PC takes the
+// card, or any write after it (the cache no longer matches the card), overwrites the PC's
+// files (1.1.13, E1000: VBOOT.PBP cut to 32 KB). So: finish and flush every write first,
+// then after USB restart Nemo instead of touching the card with a stale cache.
 static void usb_open(App *a) {
     if (a->music_scan_state == 1) { ui_toast(a, tr(S_USB_WAIT_SCAN)); return; }   // that thread reads ms0:
-    media_suspend(a);
+    if (selfguard_busy()) { ui_toast(a, tr(S_USB_WAIT_BACKUP)); return; }
+    media_suspend(a);                         // last write: the music state (synchronous)
+    for (int i = 0; i < 300 && art_busy(); i++) SDL_Delay(10);   // an artwork cache write in flight
+    log_msg("usb: on");
+    log_pause();
+    platform_sync_card();
     if (usb_enter() != 0) {
+        log_resume();
         media_resume(a);
         ui_toast(a, tr(S_USB_FAILED));
         return;
     }
-    log_msg("usb: on");
-    log_pause();
     a->net_screen = NETS_USB;
     idle_reset(&a->idle, a->now_ms);
 }
 
+// Back from USB: the PSP's view of the card is stale, so restart (fresh FAT cache, new files
+// picked up) without writing anything first. Only if that fails, carry on as before.
+static void usb_restart(App *a) {
+    launch_self();
+    log_resume();
+    log_msg("usb: restart failed, rescanning");
+    a->net_screen = NETS_MAIN;
+    media_resume(a);
+}
+
 static void usb_close(App *a) {
     usb_leave();
-    log_resume();
-    log_msg("usb: off");
-    a->net_screen = NETS_MAIN;
-    media_resume(a);                          // rescan: games and music copied from the PC show up
+    usb_restart(a);
 }
 
 void network_on_suspend(App *a) {
     if (a->ftp.phase != FTP_OFF) ftpsrv_disable();
-    if (usb_active()) {
-        usb_leave();
-        log_resume();
-    }
+    if (usb_active()) usb_leave();            // restart on wake (network_on_wake)
 }
 
 void network_on_wake(App *a) {
     ftpsrv_status(&a->ftp);
-    if (a->net_screen == NETS_USB && !usb_active()) a->net_screen = NETS_MAIN;
+    if (a->net_screen == NETS_USB && !usb_active()) { usb_restart(a); return; }
     if (a->ftp.phase == FTP_OFF && a->net_screen != NETS_USB) media_resume(a);
 }
 

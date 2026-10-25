@@ -141,6 +141,11 @@ static int rmtree_depth(const char *path, int depth) {
 
 int platform_rmtree(const char *path) { return rmtree_depth(path, 0); }
 
+void platform_sync_card(void) {
+    int a = sceIoSync("ms0:", 0), b = sceIoSync("fatms0:", 0);
+    log_msg("card: sync ms0=%08X fatms0=%08X", (unsigned)a, (unsigned)b);
+}
+
 int platform_copy_file(const char *from, const char *to) {
     SceUID in = sceIoOpen(from, PSP_O_RDONLY, 0);
     if (in < 0) return -1;

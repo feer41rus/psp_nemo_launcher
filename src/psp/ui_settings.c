@@ -253,6 +253,34 @@ static void set_clock(App *a, SetId id, int index) {
     if (t == CLK_LAUNCHER && mhz > 333) ui_toast(a, tr(S_ST_OC_NEMO_NOTE));
 }
 
+// Drop-down lists (SC_PICK): overclock clocks and time zones.
+#define PICK_ROWS 9
+
+static int pick_count(SetId id) { return id == SID_TIMEZONE ? TIME_ZONE_COUNT : 8; }
+
+static int pick_current(const App *a, SetId id) {
+    if (id != SID_TIMEZONE) return clock_index(a, id);
+    int i = zone_index(a->tz_minutes);
+    return i < 0 ? 0 : i;
+}
+
+static void pick_label(SetId id, int i, char *out, size_t cap) {
+    if (id == SID_TIMEZONE) zone_text(TIME_ZONES[i].minutes, out, cap);
+    else if (!ARK_CLOCKS[i]) snprintf(out, cap, "%s", tr(S_ST_V_AUTO));
+    else snprintf(out, cap, tr(ARK_CLOCKS[i] > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), ARK_CLOCKS[i]);
+}
+
+static void pick_apply(App *a, SetId id, int i) {
+    if (i == pick_current(a, id)) return;
+    if (id != SID_TIMEZONE) { set_clock(a, id, i); return; }
+    if (set_reg(a, "time_zone_offset", TIME_ZONES[i].minutes) == 0) a->tz_minutes = TIME_ZONES[i].minutes;
+}
+
+static void pick_scroll(App *a) {
+    if (a->pick_sel < a->pick_top) a->pick_top = a->pick_sel;
+    if (a->pick_sel >= a->pick_top + PICK_ROWS) a->pick_top = a->pick_sel - PICK_ROWS + 1;
+}
+
 extern const unsigned char testers_txt[], credits_ru[], credits_en[], nemo_logo[];
 extern const unsigned int testers_txt_size, credits_ru_size, credits_en_size, nemo_logo_size;
 
@@ -442,14 +470,18 @@ void settings_action(App *a, Action act) {
         else if (act == ACT_BACK) { a->oc_warn = 0; setmenu_handle(&a->setmenu, ACT_BACK, VISIBLE_ROWS); }
         return;
     }
-    if (a->pick_open) {                       // drop-down of clocks
+    if (a->pick_open) {                       // drop-down list
+        int n = pick_count(a->pick_id);
         if (act == ACT_UP && a->pick_sel > 0) a->pick_sel--;
-        else if (act == ACT_DOWN && a->pick_sel < 7) a->pick_sel++;
+        else if (act == ACT_DOWN && a->pick_sel < n - 1) a->pick_sel++;
+        else if (act == ACT_LEFT) a->pick_sel = a->pick_sel > PICK_ROWS ? a->pick_sel - PICK_ROWS : 0;
+        else if (act == ACT_RIGHT) a->pick_sel = a->pick_sel + PICK_ROWS < n ? a->pick_sel + PICK_ROWS : n - 1;
         else if (act == ACT_BACK) a->pick_open = 0;
         else if (act == ACT_CONFIRM) {
             a->pick_open = 0;
-            if (a->pick_sel != clock_index(a, a->pick_id)) set_clock(a, a->pick_id, a->pick_sel);
+            pick_apply(a, a->pick_id, a->pick_sel);
         }
+        pick_scroll(a);
         return;
     }
     if (a->plug) { plugins_action(a, act); return; }
@@ -466,9 +498,11 @@ void settings_action(App *a, Action act) {
     }
     case SC_CHANGE: change(a, c.id, c.delta); break;
     case SC_PICK:
-        if (!a->ark_text) { ui_toast(a, tr(S_ST_ARK_READ_FAILED)); break; }
+        if (c.id != SID_TIMEZONE && !a->ark_text) { ui_toast(a, tr(S_ST_ARK_READ_FAILED)); break; }
         a->pick_id = c.id;
-        a->pick_sel = clock_index(a, c.id);
+        a->pick_sel = pick_current(a, c.id);
+        a->pick_top = 0;
+        pick_scroll(a);
         a->pick_open = 1;
         break;
     case SC_OPEN:
@@ -509,7 +543,7 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
     case SID_LANGUAGE: snprintf(out, cap, "%s", tr(S_LANG_NAME)); break;
     case SID_WPA2: snprintf(out, cap, "%s", tr(a->wpa2_on ? S_ON : S_OFF)); break;
     case SID_NICKNAME: snprintf(out, cap, "%s", a->nickname); break;
-    case SID_GITHUB: snprintf(out, cap, "%s", tr(S_AB_SOON)); break;
+    case SID_GITHUB: snprintf(out, cap, "feer41rus/psp_nemo_launcher"); break;
     case SID_SITE_INFO: snprintf(out, cap, "nemoleague.ru"); break;
     case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_REPLACE_XMB: {
         const NemoSettings *s = &a->lib->settings;
@@ -682,18 +716,24 @@ void ui_settings_draw(const App *app) {
     if (app->dt_open) draw_editor(app);
     if (app->nick_open) ui_osk_draw(app);
     if (app->pick_open) {                         // drop-down next to the selected row
-        int w = 190, rh = 22, h = 8 * rh + 12, x = SCREEN_W - w - 30, py = CONTENT_Y + (CONTENT_H - h) / 2;
+        int n = pick_count(app->pick_id), rows = n < PICK_ROWS ? n : PICK_ROWS;
+        int w = app->pick_id == SID_TIMEZONE ? 300 : 190, rh = 22, h = rows * rh + 12;
+        int x = SCREEN_W - w - 30, py = CONTENT_Y + (CONTENT_H - h) / 2;
         gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x00000070);
         gfx_round_rect(x, py, w, h, 10, 0x1a2230fa);
         gfx_round_rect_outline(x, py, w, h, 10, COL_ACCENT);
-        int cur = clock_index(app, app->pick_id);
-        for (int i = 0; i < 8; i++) {
-            int ry = py + 6 + i * rh;
+        int cur = pick_current(app, app->pick_id);
+        for (int r = 0; r < rows; r++) {
+            int i = app->pick_top + r, ry = py + 6 + r * rh;
             if (i == app->pick_sel) gfx_round_rect(x + 6, ry, w - 12, rh - 2, 6, 0x2b5fa8ff);
-            char s[48];
-            if (!ARK_CLOCKS[i]) snprintf(s, sizeof s, "%s", tr(S_ST_V_AUTO));
-            else snprintf(s, sizeof s, tr(ARK_CLOCKS[i] > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), ARK_CLOCKS[i]);
+            char s[96];
+            pick_label(app->pick_id, i, s, sizeof s);
             gfx_text_fit(FONT_BODY, x + 16, ry + 2, w - 32, i == cur ? COL_ACCENT : COL_TEXT, s);
+        }
+        if (n > rows) {                           // scroll bar
+            int bh = h - 12, th = bh * rows / n, ty = py + 6 + (bh - th) * app->pick_top / (n - rows);
+            gfx_round_rect(x + w - 7, py + 6, 3, bh, 1, 0x2a3446ff);
+            gfx_round_rect(x + w - 7, ty, 3, th, 1, COL_ACCENT);
         }
     }
 }

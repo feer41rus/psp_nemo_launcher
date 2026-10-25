@@ -122,7 +122,7 @@ typedef struct {
     PowerSave psave;
     char *ark_text;             // SETTINGS.TXT cache for Settings › ARK / Overclock (NULL = unreadable)
     int oc_warn;                // overclock warning shown on entering the section
-    int pick_open, pick_sel;    // drop-down list of clocks (Settings › ARK › Overclock)
+    int pick_open, pick_sel, pick_top;   // drop-down list: clocks (Settings › ARK › Overclock), time zones
     SetId pick_id;
     int music_off;              // Settings › Nemo › Music off: stopped and unloaded
     int reset_open, reset_sel, reset_confirm;   // Settings › System › Reset
@@ -229,6 +229,7 @@ void selfguard_tick(App *a);                          // every frame
 void selfguard_clean_exit(void);                      // Nemo leaves on purpose: not a failed start
 void selfguard_action(App *a, Action act);
 void selfguard_draw(const App *a);
+int selfguard_busy(void);                             // backup copy still writing
 // Plugin manager (ui_plugins.c)
 void plugins_open(App *a);
 void plugins_action(App *a, Action act);

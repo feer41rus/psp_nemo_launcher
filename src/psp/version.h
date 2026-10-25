@@ -3,8 +3,8 @@
 
 // Release numbering (author's decision): 1.1.x = improvements (network, settings, polish),
 // 1.2 = in-game music plugin. Bump for every stage delivered to the console.
-#define NEMO_VERSION "1.1.13"
-#define NEMO_STAGE_RU "Главная до первой игры"
-#define NEMO_STAGE_EN "Home before the first game"
+#define NEMO_VERSION "1.1.14"
+#define NEMO_STAGE_RU "USB без порчи карты"
+#define NEMO_STAGE_EN "USB without card damage"
 
 #endif

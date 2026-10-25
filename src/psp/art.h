@@ -8,6 +8,7 @@
 // Lazily loaded game artwork (ICON0 / PIC1) with a small LRU texture cache.
 // Getters return NULL until the image is loaded; art_tick loads one pending image per call.
 void art_reset(void);
+int art_busy(void);                        // worker still reading/writing the card
 SDL_Texture *art_icon(int game);
 SDL_Texture *art_background(int game);
 SDL_Texture *art_cover(int album);           // album cover (embedded or folder image), NULL until loaded / if none

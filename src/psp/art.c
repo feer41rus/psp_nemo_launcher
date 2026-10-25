@@ -266,6 +266,8 @@ static void clear(Slot *slots, int n) {
     }
 }
 
+int art_busy(void) { return job.state == JOB_QUEUED; }
+
 void art_reset(void) {
     generation++;
     clear(icons, MAX_ICONS);

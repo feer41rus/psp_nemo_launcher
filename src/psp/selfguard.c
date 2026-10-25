@@ -75,7 +75,12 @@ void selfguard_start(App *a, const char *path) {
     if (from_backup) {
         char vboot[192], title[128] = "";
         snprintf(vboot, sizeof vboot, "%sVBOOT.PBP", platform_arkpath());
-        if (platform_pbp_title(vboot, title, sizeof title) != 0 || strcmp(title, "Nemo Launcher") != 0) {
+        // Only a readable launcher of another title counts: an unreadable VBOOT.PBP (damaged
+        // card) must not trigger the restore, which deletes VBOOT_ARK.PBP.
+        int rc = platform_pbp_title(vboot, title, sizeof title);
+        if (rc != 0 || !title[0]) {
+            log_msg("guard: VBOOT.PBP unreadable (rc=%d), restore not offered", rc);
+        } else if (strcmp(title, "Nemo Launcher") != 0) {
             log_msg("guard: VBOOT.PBP is \"%s\", not Nemo: asking to restore", title);
             a->rx_stage = 1;
             a->rx_yes = 1;
@@ -91,6 +96,8 @@ void selfguard_start(App *a, const char *path) {
     }
 }
 
+int selfguard_busy(void) { return backup_state == 1 && !backup_finished; }
+
 void selfguard_clean_exit(void) {
     healthy_done = 1;
     write_int_file(BOOT_FILE, 0);
@@ -99,7 +106,7 @@ void selfguard_clean_exit(void) {
 void selfguard_tick(App *a) {
     uint32_t up = platform_ms() - start_ms;
     if (guard_toast) { guard_toast = 0; ui_toast(a, tr(S_RX_GUARD)); }
-    if (!healthy_done && up >= HEALTHY_MS) {
+    if (!healthy_done && up >= HEALTHY_MS && !usb_active()) {
         healthy_done = 1;
         write_int_file(BOOT_FILE, 0);
     }

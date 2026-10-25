@@ -27,6 +27,7 @@ int platform_impose_get(int param);
 // Files (1.1.10-1.1.11). rmtree: a folder and everything inside (depth-limited); 0 ok.
 int  platform_rmtree(const char *path);
 int  platform_copy_file(const char *from, const char *to);   // 0 ok
+void platform_sync_card(void);                               // flush ms0: caches to the card
 long platform_file_size(const char *path);                    // -1 missing
 long platform_dir_size(const char *dir);                      // files directly inside
 int  platform_pbp_title(const char *pbp_path, char *out, size_t cap);   // PARAM.SFO TITLE; 0 ok
