@@ -1,0 +1,31 @@
+# PSP build of Nemo Launcher. Runs inside the pspdev/pspdev Docker image from build/psp:
+#   make -C build/psp -f ../../Makefile.psp
+# Sources are found through VPATH; objects stay under build/psp.
+
+ROOT := ../..
+VPATH := $(ROOT)
+
+TARGET = nemo
+CORE_OBJS = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/src/core/*.c))
+PSP_OBJS  = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/src/psp/*.c)) \
+            $(patsubst $(ROOT)/%.S,%.o,$(wildcard $(ROOT)/src/psp/*.S))
+FTP_OBJS  = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/third_party/libpspftp/src/*.c))
+OBJS = $(CORE_OBJS) $(PSP_OBJS) $(FTP_OBJS) third_party/cjson/cJSON.o gen/font_regular.o gen/font_semibold.o gen/ncl_logo.o gen/nemo_logo.o gen/testers_txt.o gen/credits_ru.o gen/credits_en.o
+
+SDL_PKGS = sdl2 SDL2_ttf SDL2_image SDL2_gfx SDL2_mixer
+INCDIR = $(ROOT)/src/core $(ROOT)/src/psp $(ROOT)/third_party/cjson $(ROOT)/third_party/libpspftp/include
+CFLAGS = -O2 -G0 -Wall -Wno-unused-parameter -std=gnu11 -MMD -MP $(shell psp-pkg-config --cflags $(SDL_PKGS))
+LIBS = $(filter-out -lSDL2main -pthread,$(shell psp-pkg-config --libs $(SDL_PKGS))) \
+       -lpspsystemctrl_user -lpspkubridge -larkctrl -lpsphprm -lpspreg -lpsprtc -lpspwlan -lpsppower -lpspmp3
+
+BUILD_PRX = 1
+PSP_FW_VERSION = 660
+PSP_LARGE_MEMORY = 1
+EXTRA_TARGETS = EBOOT.PBP
+PSP_EBOOT_TITLE = Nemo Launcher
+
+PSPSDK = $(shell psp-config --pspsdk-path)
+include $(PSPSDK)/lib/build.mak
+
+# Header dependencies (-MMD): a changed header (e.g. the App struct in ui.h) rebuilds every user.
+-include $(OBJS:.o=.d)

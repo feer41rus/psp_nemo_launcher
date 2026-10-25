@@ -1,0 +1,55 @@
+#ifndef NEMO_MNAV_H
+#define NEMO_MNAV_H
+
+#include "input.h"
+
+typedef enum { MS_LIBRARY, MS_NOW, MS_MENU, MS_QUEUE, MS_PICK, MS_OSK, MS_CONFIRM, MS_LISTEN } MusicScreen;
+
+// Sizes of what the Music tab shows; filled by the UI before every mnav_handle call.
+typedef struct {
+    int side_count;     // albums + playlists in the left column
+    int track_count;    // tracks of the selected album/playlist
+    int menu_count;     // rows of the open triangle menu
+    int queue_count;
+    int pick_count;     // playlists in the "add to playlist" picker
+} MusicModel;
+
+typedef struct {
+    MusicScreen kind;
+    int sel;
+} MusicNavScreen;
+
+#define MNAV_DEPTH 6
+
+// Now Playing focus: the progress bar or one of the transport buttons.
+typedef enum { NP_PROGRESS, NP_SHUFFLE, NP_PREV, NP_PLAY, NP_NEXT, NP_REPEAT } NowFocus;
+
+typedef struct {
+    MusicNavScreen stack[MNAV_DEPTH];   // stack[0] is always MS_LIBRARY
+    int depth;
+    int column;                         // library: 0 = side column, 1 = track list
+    int side_sel, track_sel;
+    NowFocus np_focus;                  // cursor on Now Playing
+    NowFocus np_last_button;            // button to return to from the progress bar
+} MusicNav;
+
+typedef enum {
+    MC_NONE, MC_PLAY_TRACK, MC_OPEN_NOW, MC_TOGGLE_PAUSE, MC_SEEK, MC_SHUFFLE, MC_REPEAT,
+    MC_OPEN_MENU, MC_MENU_PICK, MC_QUEUE_JUMP, MC_QUEUE_REMOVE, MC_PICK, MC_LISTEN,
+    MC_SIDE_CHANGED, MC_CONFIRM_YES, MC_NP_BUTTON
+} MusicCmdType;
+
+typedef struct {
+    MusicCmdType type;
+    int index;
+    int dir;
+} MusicCmd;
+
+void mnav_init(MusicNav *n);
+MusicCmd mnav_handle(MusicNav *n, Action a, const MusicModel *m);
+void mnav_push(MusicNav *n, MusicScreen s);
+void mnav_pop(MusicNav *n);
+MusicScreen mnav_top(const MusicNav *n);
+int mnav_sel(const MusicNav *n);        // cursor of the top screen (lists/menus)
+
+#endif

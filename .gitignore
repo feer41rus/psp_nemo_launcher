@@ -1,0 +1,27 @@
+# Build output (make test / make psp / make release)
+build/
+dist/
+
+# Local tools
+.venv/
+__pycache__/
+*.pyc
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# PSP files that must never be committed from a card
+*.PBP
+!assets/**/*.PBP
+
+# Development notes (designs, plans, roadmap, research): kept locally, not published
+docs/*
+!docs/CREDITS.md
+!docs/CREDITS.en.md
+
+# Host unit tests (kept locally, not published)
+tests/

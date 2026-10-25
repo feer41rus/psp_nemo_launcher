@@ -1,0 +1,1 @@
+Vendored from https://github.com/pspdev/libpspftp @ c3f6a0f4d32c7c9b34e523a37a8b967d3b568dd2 (MIT). Server part only (ftpclient.c, loadutil.c omitted). Local changes are marked 'Nemo:'.
