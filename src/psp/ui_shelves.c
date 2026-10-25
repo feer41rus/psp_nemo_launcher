@@ -10,6 +10,7 @@
 #define TILE_GAP 8
 #define SHELF_H 76
 #define BANNER_H 140
+#define FIRST_RUN_H 56
 #define VIEW_TOP (TOP_BAR_H + 4)
 #define VIEW_BOTTOM (SCREEN_H - HINT_BAR_H - 4)
 
@@ -134,14 +135,21 @@ static void draw_empty(void) {
     gfx_text(FONT_SMALL, (SCREEN_W - gfx_text_width(FONT_SMALL, h)) / 2, 140, COL_MUTED, h);
 }
 
+// Home before any game was launched: invite to play (the shelves below list the games by type).
+static void draw_first_run(int y) {
+    gfx_text(FONT_TITLE, LEFT, y, COL_TEXT, tr(S_HOME_FIRST));
+    gfx_text_fit(FONT_SMALL, LEFT, y + 26, SCREEN_W - 2 * LEFT, COL_MUTED, tr(S_HOME_FIRST_HINT));
+}
+
 void ui_shelves_draw(App *app, Tab tab) {
     int count;
     const Shelf *shelves = shelves_of(app, tab, &count);
     int banner = tab == TAB_HOME && app->continue_game >= 0;
     if (count == 0 && !banner) { draw_empty(); return; }
+    int first_run = tab == TAB_HOME && !banner;
 
     int focus_shelf = app->nav.shelf[tab];
-    int base = banner ? BANNER_H + 4 : VIEW_TOP + 4;
+    int base = banner ? BANNER_H + 4 : VIEW_TOP + 4 + (first_run ? FIRST_RUN_H : 0);
 
     // Vertical scroll: keep the focused shelf inside the view; the banner means scroll 0.
     float target = app->scroll_y[tab];
@@ -160,6 +168,7 @@ void ui_shelves_draw(App *app, Tab tab) {
         draw_home_background(app);
         draw_banner(app, -sy);
     }
+    if (first_run) draw_first_run(VIEW_TOP + 8 - sy);
 
     for (int s = 0; s < count; s++) {
         int y = base + s * SHELF_H - sy;

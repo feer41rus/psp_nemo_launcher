@@ -16,6 +16,7 @@ typedef struct {
 } Shelf;
 
 // Home: "Recent" (without the continue game, no utilities), then non-empty user folders.
+// Nothing launched yet and no folder shelves: PSP, PS1, Homebrew type shelves instead.
 // continue_game: most recent existing non-utility game, -1 if none.
 int shelves_home(const GameList *gl, const Library *lib, Shelf *out, int max, int *continue_game);
 

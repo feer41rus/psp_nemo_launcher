@@ -77,6 +77,7 @@ release: psp   # run "make test" locally first (tests are not published)
 	mv $(REL)/full/$(ARK_DIR)/VBOOT.PBP $(REL)/full/$(ARK_DIR)/VBOOT_ARK.PBP
 	cp dist/VBOOT.PBP dist/lang_ru.json dist/lang_en.json $(REL)/full/$(ARK_DIR)/
 	cp README.md README.ru.md LICENSE $(REL)/full/
+	cp -r guides $(REL)/full/
 	cd $(REL)/full && zip -qr "$(CURDIR)/dist/release/$(REL_NAME)_full_with_ark-5.zip" .
 	@ls -l dist/release/
 

@@ -22,7 +22,20 @@ Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console leag
 
 ## Requirements
 
-- PSP (1000/2000/3000/Go/E1000) or PS Vita with **firmware 6.60 or 6.61** and **[ARK-5](https://github.com/PSP-Arkfive/ARK-5)**. Nemo shows a message and returns to the XMB on anything else.
+- PSP (1000/2000/3000/Go/E1000) or PS Vita with **firmware 6.61** (or 6.60 — see below how to update) and **[ARK-5](https://github.com/PSP-Arkfive/ARK-5)**. Nemo shows a message and returns to the XMB on anything else.
+
+### Prepare the PSP: firmware 6.61
+
+ARK-5 (and so Nemo) needs the official system software **6.61** (6.60 also works). Check it in the XMB: *Settings › System Settings › System Information*. Official update files from Sony's server (the same links ARK-5's DC10 uses):
+
+- PSP 1000/2000/3000/E1000 (Street): [6.61 update](http://du01.psp.update.playstation.org/update/psp/image/us/2014_1212_6be8878f475ac5b1a499b95ab2f7d301/EBOOT.PBP)
+- PSP Go: [6.61 update for Go](http://du01.psp.update.playstation.org/update/psp/image2/us/2014_1212_fd0f7d0798b4f6e6d32ef95836740527/EBOOT.PBP)
+
+**On official firmware below 6.61:** copy the update to `PSP/GAME/UPDATE/EBOOT.PBP` on the memory stick, run it from the XMB (*Game › Memory Stick*) with a charged battery and the charger plugged in, then install ARK-5.
+
+**Coming from PROMOD / PRO-C on 6.60–6.61:** step-by-step guide — [moving from PROMOD to ARK-5](guides/promod-to-ark5.md).
+
+**Coming from another custom firmware (ME, LME, …):** don't update over it. Use the [DC10](https://github.com/PSP-Arkfive/Despertar-Del-Cementerio) way from the `full` archive: rename the update to **`661.PBP`** (PSP Go: **`661GO.PBP`**) and copy it to the root of the memory stick → run `Custom IPL` and install the new cIPL → turn the PSP off and on holding **L** → in DC10 choose *Install 6.61 ARK*. Battery fully charged, never turn the PSP off while it installs.
 
 ## Installation
 

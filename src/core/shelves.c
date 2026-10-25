@@ -21,6 +21,24 @@ static int add_folders(const GameList *gl, const Library *lib, Shelf *out, int n
     return n;
 }
 
+// Appends non-empty type shelves (PSP, PS1, Homebrew, then Utilities if with_utilities).
+static int add_types(const GameList *gl, Shelf *out, int n, int max, int with_utilities) {
+    static const struct { ShelfKind shelf; GameKind kind; } TYPES[] = {
+        { SHELF_PSP, GK_PSP }, { SHELF_PS1, GK_PS1 },
+        { SHELF_HOMEBREW, GK_HOMEBREW }, { SHELF_UTILITY, GK_UTILITY },
+    };
+    for (unsigned t = 0; t < sizeof TYPES / sizeof *TYPES && n < max; t++) {
+        if (TYPES[t].kind == GK_UTILITY && !with_utilities) continue;
+        Shelf *s = &out[n];
+        memset(s, 0, sizeof *s);
+        s->kind = TYPES[t].shelf;
+        for (int g = 0; g < gl->count; g++)
+            if (gl->items[g].kind == TYPES[t].kind) shelf_push(s, g);
+        if (s->count > 0) n++;
+    }
+    return n;
+}
+
 int shelves_home(const GameList *gl, const Library *lib, Shelf *out, int max, int *continue_game) {
     int n = 0;
     *continue_game = -1;
@@ -34,22 +52,13 @@ int shelves_home(const GameList *gl, const Library *lib, Shelf *out, int max, in
         else shelf_push(&recent, g);
     }
     if (recent.count > 0 && n < max) out[n++] = recent;
-    return add_folders(gl, lib, out, n, max, 0);
+    n = add_folders(gl, lib, out, n, max, 0);
+    // Nothing launched yet and no folders: show the games by type so Home isn't empty.
+    if (*continue_game < 0 && n == 0) n = add_types(gl, out, n, max, 0);
+    return n;
 }
 
 int shelves_library(const GameList *gl, const Library *lib, Shelf *out, int max) {
-    static const struct { ShelfKind shelf; GameKind kind; } TYPES[] = {
-        { SHELF_PSP, GK_PSP }, { SHELF_PS1, GK_PS1 },
-        { SHELF_HOMEBREW, GK_HOMEBREW }, { SHELF_UTILITY, GK_UTILITY },
-    };
     int n = add_folders(gl, lib, out, 0, max, 1);   // empty folders stay manageable
-    for (unsigned t = 0; t < sizeof TYPES / sizeof *TYPES && n < max; t++) {
-        Shelf *s = &out[n];
-        memset(s, 0, sizeof *s);
-        s->kind = TYPES[t].shelf;
-        for (int g = 0; g < gl->count; g++)
-            if (gl->items[g].kind == TYPES[t].kind) shelf_push(s, g);
-        if (s->count > 0) n++;
-    }
-    return n;
+    return add_types(gl, out, n, max, 1);
 }
