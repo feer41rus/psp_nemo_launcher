@@ -126,7 +126,9 @@ static void usb_open(App *a) {
     if (selfguard_busy()) { ui_toast(a, tr(S_USB_WAIT_BACKUP)); return; }
     media_suspend(a);                         // last write: the music state (synchronous)
     for (int i = 0; i < 300 && art_busy(); i++) SDL_Delay(10);   // an artwork cache write in flight
+    selfguard_clean_exit();                   // the restart after USB is not a failed start
     log_msg("usb: on");
+    platform_sync_card();                     // logged; the second one also flushes the closed log
     log_pause();
     platform_sync_card();
     if (usb_enter() != 0) {
