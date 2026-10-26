@@ -4,6 +4,8 @@
 
 **English** · [Русский](README.ru.md)
 
+<p align="center"><img src="assets/branding/collage_en.png" alt="Nemo Launcher screenshots" width="840"></p>
+
 A modern launcher for the PSP running the **ARK-5** custom firmware. It replaces ARK's "Custom Launcher" (`VBOOT.PBP`) and keeps ARK itself untouched: games, plugins and updates stay ARK's job, Nemo adds a comfortable home for them.
 
 Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console league**.

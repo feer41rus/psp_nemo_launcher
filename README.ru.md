@@ -4,6 +4,8 @@
 
 [English](README.md) · **Русский**
 
+<p align="center"><img src="assets/branding/collage_ru.png" alt="Скриншоты Nemo Launcher" width="840"></p>
+
 Современный лаунчер для PSP на кастомной прошивке **ARK-5**. Он заменяет «Custom Launcher» ARK (`VBOOT.PBP`), а сам ARK не трогает: игры, плагины и обновления остаются делом ARK, а Nemo делает для них удобный дом.
 
 Сделано с ❤ Schastlivyy Vladislav вместе с **NCL — Nemo console league**.
