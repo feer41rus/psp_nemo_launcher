@@ -11,6 +11,8 @@ int  power_take_resumed(void);     // 1 once after wake-up completed
 unsigned power_last_arg(void);     // raw argument of the last power callback (diagnostics)
 // Listening mode: lower CPU clock for the format and turn the screen off; off: restore both.
 void power_set_listening(int on, AudioFormat fmt);
+// The equalizer is processing (1.2.1): listening mode then runs at 266 MHz for every format.
+void power_set_eq(int active);
 int  power_screen_is_off(void);
 void power_set_screen(int on);     // display only (USB / FTP idle), the clock stays as it is
 void power_sleep(void);            // put the PSP to sleep (caller saves state first)

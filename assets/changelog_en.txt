@@ -1,0 +1,84 @@
+# 1.2.3 — Splash screens and sounds
+- Splash screen at power-on: "Welcome! Your PSP. The way it should be." with a chime. Only at power-on, not after a game; any button skips; Nemo loads while it plays.
+- A thank-you "Thank you for buying your console from NCL" for sold consoles: "NCL screen › On next start" shows it once at the next power-on, then it turns itself off.
+- Quiet XMB-like interface sounds: move, select, back, tabs, list edge, menu. Silent while music plays.
+- "Settings › System › Nemo": "Welcome screen" (on by default), "NCL screen" (off by default), "Interface sounds"; moving in Settings has its own sound.
+- "Battery test": the standard test now runs at 222 MHz — at 333 MHz under constant load the PSP switched off after about 35 minutes.
+- Music: a fourth view "All tracks" (□) — every track from MUSIC and its subfolders, A to Z.
+
+# 1.2.2 — Battery
+- Settings › About PSP › Battery: charge and status; "Battery details" — voltage, current, temperature, time left, capacity, wear, charge cycles, serial number (read only).
+- "Battery test": a standard test with its own game-like load (CPU, graphics, memory, card reads, max brightness) and "Everyday use"; no Wi-Fi or sound, the PSP runs until it switches off, a log line every 10 seconds (charge, voltage, free memory). Auto sleep and backlight auto-off are off during the test and come back after it or at the next Nemo start.
+- "Test results": the last 5 tests with a charge and voltage graph.
+- "Nemo estimate" and "In a game" in battery details: Nemo's own time left from CPU load and brightness; Nemo refines the drain itself while running on battery.
+- PSP Go and E1000: battery readings and test results may be inaccurate.
+
+# 1.2.1 — Player
+- The Square button in Music switches the view: Albums → Artists → Folders.
+- Artists: albums first (newest on top), then tracks; "All tracks" lists every song of the artist.
+- Folders — as on the card: MUSIC and its subfolders, tracks by file name; the Triangle menu plays the folder, with subfolders, shuffled, adds it to the queue or a playlist.
+- .m3u playlists in MUSIC are imported automatically and become ordinary playlists; any playlist can be saved to MUSIC/Playlists for the PC.
+- Equalizer (Now Playing › Triangle): 5 bands, presets, "Custom", on/off switch and reset.
+- Cyrillic folder and file names: the PSP lists names in Shift-JIS, now they show correctly (folders, track and game titles from file names, .m3u); tags and the game list are read again once.
+- The button focus ring on Now Playing has no line through the middle.
+- Power window dimming on every tab; "Reset settings" is last in System again.
+
+# 1.2.0 — Fixes and debugging
+- FLAC plays (16/24-bit, mono and stereo, up to 48 kHz); an unsupported file is skipped with a note.
+- Screen off: a short SELECT press wakes the screen, SELECT+L / SELECT+R switch the track without waking it.
+- Power window: hold HOME for 1 s instead of 1.5 s, the background fades to dark.
+- Settings › System › Debug: RAM / CPU / FPS box at the bottom left (SELECT+Triangle shows and hides it), "Keep logs": Off / 2 / 5 / 10 / 20.
+- Once a minute the log records FPS, CPU clock and load, free memory.
+- Bad battery readings no longer reach the indicator.
+- About Nemo › Version opens this list of changes; the stage name is gone from the version line.
+- New logo: the NCL "C".
+- README: every button combination.
+
+# 1.1.14 — USB without card damage
+- Before USB Nemo finishes its writes and closes the log; nothing is written to the card during USB.
+- Time zone drop-down, GitHub in About Nemo.
+
+# 1.1.13 — Home before the first game
+- Until something is launched: "PSP games" / PS1 / Homebrew shelves and a hint instead of "No games".
+
+# 1.1.12 — Getting ready for GitHub
+- README in English and Russian, GPL-3.0-or-later, lite / full release archives.
+
+# 1.1.11 — Nemo instead of XMB
+- Start Nemo instead of XMB, with a guard against a broken build.
+
+# 1.1.10 — Game card
+- Per-game overclock, saved data (including removed games), deleting a game.
+
+# 1.1.9 — About Nemo
+- Logo, version, creators, beta testers, credits.
+
+# 1.1.8 — Plugin manager
+- ARK plugins (PLUGINS.TXT): enable, disable, install, remove. Runs only on 6.60+ with ARK-5.
+
+# 1.1.7 — Nemo settings and reset
+- Exit to XMB in the power window, NCL logo, site, Music tab visibility; settings reset.
+
+# 1.1.6 — ARK and overclock
+- ARK settings (USB charging, memory, cache, boot logo, UMD and more) and overclock for games, XMB and Nemo.
+
+# 1.1.5 — System
+- Nickname, language, brightness, backlight, auto sleep, confirm button — shared with XMB.
+
+# 1.1.4 — Settings and time
+- New settings screen, date and time, formats, time zone.
+
+# 1.1.3 — Hardware MP3
+- MP3 on the Media Engine: near-instant track switching, no stutter, longer battery life.
+
+# 1.1.2 — Buttons and power
+- Hold HOME for the power window; SELECT+L / SELECT+R as Music button + L / R; "Nemo Launcher" name in XMB.
+
+# 1.1.1 — Network
+- Wi-Fi, FTP, USB, screen blanking, rescan.
+
+# 1.1 — Music player
+- Library, albums, queue, Now Playing, listening mode.
+
+# 1.0 — Launcher
+- Home, library, folders, keyboard, launching games through ARK, settings, language, caches, screenshots.

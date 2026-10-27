@@ -95,8 +95,9 @@ void ui_nowplaying_draw(App *a) {
     uint32_t on = COL_ACCENT, off = COL_MUTED;
     if (np_top && focus >= NP_SHUFFLE) {
         int fx = x + step * (2 * (focus - NP_SHUFFLE) + 1) / 2;
-        gfx_round_rect(fx - 16, ry - 16, 32, 32, 16, 0x6fb0ff40);
-        gfx_round_rect_outline(fx - 16, ry - 16, 32, 32, 16, COL_ACCENT);
+        // A real circle: a rounded square with radius = half its side drew the middle row twice (1.2.1).
+        gfx_disc(fx, ry, 16, 0x6fb0ff40);
+        gfx_circle(fx, ry, 16, COL_ACCENT);
     }
     shuffle_icon(x + step / 2, ry, a->queue.shuffle ? on : off);
     transport(0, x + step * 3 / 2, ry, 5, COL_TEXT);
@@ -171,6 +172,16 @@ static void draw_menu(const App *a) {
             break;
         }
         case MM_LISTEN: snprintf(label, sizeof label, "%s", tr(S_MUSIC_LISTEN)); break;
+        case MM_EQ: snprintf(label, sizeof label, "%s", tr(S_EQ_TITLE)); break;
+        case MM_PLAY_FOLDER: snprintf(label, sizeof label, "%s", tr(S_MM_PLAY_FOLDER)); break;
+        case MM_PLAY_FOLDER_ALL: {
+            int f;
+            music_side_kind(a, a->mmenu_side, &f);
+            snprintf(label, sizeof label, tr(S_MM_PLAY_ALL_FMT), a->folders.count ? a->folders.folders[f].total : 0);
+            break;
+        }
+        case MM_SHUFFLE_FOLDER_ALL: snprintf(label, sizeof label, "%s", tr(S_MM_SHUFFLE_ALL)); break;
+        case MM_EXPORT_M3U: snprintf(label, sizeof label, "%s", tr(S_MM_EXPORT_M3U)); break;
         case MM_RENAME_PLAYLIST: snprintf(label, sizeof label, "%s", tr(S_MUSIC_RENAME_PLAYLIST)); break;
         case MM_DELETE_PLAYLIST: snprintf(label, sizeof label, "%s", tr(S_MUSIC_DELETE_PLAYLIST)); break;
         }
@@ -213,12 +224,61 @@ static void draw_pick(const App *a) {
     }
 }
 
+// Equalizer (1.2.1, author's layout B): rows on/off, preset, then one horizontal bar per band.
+static void draw_eq(const App *a) {
+    static const StrId PRESETS[EQP_COUNT] = { S_EQ_P_FLAT, S_EQ_P_BASS, S_EQ_P_ROCK, S_EQ_P_POP, S_EQ_P_JAZZ,
+                                              S_EQ_P_CLASSIC, S_EQ_P_VOCAL, S_EQ_P_CUSTOM };
+    const MusicData *d = a->mdata;
+    int g[EQ_BANDS];
+    eq_preset_gains((EqPreset)d->eq_preset, d->eq_custom, g);
+    gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, COL_BG);
+    gfx_text(FONT_BOLD, 16, CONTENT_Y + 6, COL_TEXT, tr(S_EQ_TITLE));
+    const char *rs = tr(S_HINT_RESET);   // "□ Reset" badge, top right
+    int rw = gfx_text_width(FONT_SMALL, rs) + 30, rx = SCREEN_W - 12 - rw;
+    gfx_round_rect(rx, CONTENT_Y + 5, rw, 18, 9, COL_PANEL);
+    gfx_button_glyph(GLYPH_SQUARE, rx + 12, CONTENT_Y + 14, 11);
+    gfx_text(FONT_SMALL, rx + 22, CONTENT_Y + 8, COL_MUTED, rs);
+    int sel = mnav_sel(&a->mnav), x = 12, w = SCREEN_W - 24, y = CONTENT_Y + 30;
+    for (int r = 0; r < 2 + EQ_BANDS; r++, y += 22) {
+        int on = r == sel;
+        gfx_round_rect(x, y, w, 20, 6, on ? 0x24324aff : COL_PANEL);
+        if (on) gfx_round_rect_outline(x, y, w, 20, 6, COL_ACCENT);
+        if (r == 0) {
+            gfx_text(FONT_BODY, x + 10, y + 3, COL_TEXT, tr(S_EQ_TITLE));
+            int sx = x + w - 40;                     // switch
+            gfx_round_rect(sx, y + 4, 28, 12, 6, d->eq_on ? 0x2b5fa8ff : 0x3a4658ff);
+            gfx_round_rect(d->eq_on ? sx + 18 : sx + 2, y + 6, 8, 8, 4, 0xffffffff);
+        } else if (r == 1) {
+            char v[48];
+            snprintf(v, sizeof v, "‹ %s ›", tr(PRESETS[d->eq_preset]));
+            gfx_text(FONT_BODY, x + 10, y + 3, COL_TEXT, tr(S_EQ_PRESET));
+            gfx_text(FONT_BOLD, x + w - 10 - gfx_text_width(FONT_BOLD, v), y + 3, COL_ACCENT, v);
+        } else {
+            int b = r - 2, hz = EQ_FREQS[b];
+            char f[24], v[16];
+            if (hz < 1000) snprintf(f, sizeof f, tr(S_EQ_HZ_FMT), hz);
+            else snprintf(f, sizeof f, tr(S_EQ_KHZ_FMT), hz / 1000, hz % 1000 / 100);
+            if (g[b]) snprintf(v, sizeof v, tr(S_EQ_DB_FMT), g[b]);
+            else snprintf(v, sizeof v, "0");
+            uint32_t col = d->eq_on ? COL_TEXT : COL_MUTED;
+            gfx_text(FONT_SMALL, x + 10, y + 4, col, f);
+            int bx = x + 70, bw = w - 70 - 70, cy = y + 10;   // bar -12..+12 dB, mark at 0
+            gfx_round_rect(bx, cy - 2, bw, 4, 2, 0x2a3442ff);
+            gfx_rect(bx + bw / 2, cy - 5, 1, 10, 0x3a4658ff);
+            int kx = bx + (g[b] + EQ_MAX_DB) * bw / (2 * EQ_MAX_DB);
+            gfx_disc(kx, cy, 5, on ? COL_ACCENT : 0xe9eef5ff);
+            gfx_text(FONT_SMALL, x + w - 10 - gfx_text_width(FONT_SMALL, v), y + 4, col, v);
+        }
+    }
+}
+
 static void draw_confirm(const App *a) {
     gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x000000a0);
     int w = 320, h = 100, x = (SCREEN_W - w) / 2, y = CONTENT_Y + (CONTENT_H - h) / 2;
     gfx_round_rect(x, y, w, h, 12, 0x1a2230ff);
     char msg[220];
-    snprintf(msg, sizeof msg, tr(S_MUSIC_CONFIRM_DELETE), music_side_name(a, a->mmenu_side));
+    if (a->mconfirm == 1) snprintf(msg, sizeof msg, "%s", tr(S_EQ_RESET_Q));
+    else snprintf(msg, sizeof msg, tr(S_MUSIC_CONFIRM_DELETE), music_side_name(a, a->mmenu_side));
     char *dot = strstr(msg, "? ");
     if (dot) {
         dot[1] = '\0';
@@ -255,7 +315,11 @@ void ui_music_overlays_draw(App *a) {
     case MS_MENU: draw_menu(a); break;
     case MS_QUEUE: draw_queue(a); break;
     case MS_PICK: draw_pick(a); break;
-    case MS_CONFIRM: draw_confirm(a); break;
+    case MS_CONFIRM:
+        if (a->mconfirm == 1) draw_eq(a);   // the question sits over the equalizer
+        draw_confirm(a);
+        break;
+    case MS_EQ: draw_eq(a); break;
     case MS_OSK: ui_osk_draw(a); break;
     case MS_LISTEN: draw_listen(a); break;
     default: break;
@@ -294,11 +358,17 @@ void music_draw_hints(const App *a) {
         ui_hints_draw(a, h, 5);
         break;
     }
+    case MS_EQ: {
+        static const Hint h[] = { { ACT_UP, S_HINT_ROW }, { ACT_LEFT, S_HINT_VALUE }, { ACT_QUICK, S_HINT_RESET },
+                                  { ACT_BACK, S_HINT_BACK } };
+        ui_hints_draw(a, h, 4);
+        break;
+    }
     case MS_LISTEN: break;
     default: {
-        static const Hint h[] = { { ACT_CONFIRM, S_HINT_PLAY }, { ACT_MENU, S_HINT_MENU },
+        static const Hint h[] = { { ACT_CONFIRM, S_HINT_PLAY }, { ACT_QUICK, S_HINT_VIEW }, { ACT_MENU, S_HINT_MENU },
                                   { ACT_START, S_HINT_NOW_PLAYING } };
-        ui_hints_draw(a, h, 3);
+        ui_hints_draw(a, h, 4);
         break;
     }
     }

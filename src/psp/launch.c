@@ -55,6 +55,12 @@ static const char *iso_boot_file(const char *iso) {
     return result;
 }
 
+void launch_mark_away(int away) {
+    if (!away) { remove(LAUNCH_AWAY_FILE); return; }
+    FILE *f = fopen(LAUNCH_AWAY_FILE, "w");
+    if (f) { fputs("away\n", f); fclose(f); }
+}
+
 int launch_game(const Game *g, int disc) {
     const char *path = g->path;
     if (g->disc_count > 0 && disc >= 1 && disc <= g->disc_count) path = g->discs[disc - 1].path;
@@ -62,6 +68,7 @@ int launch_game(const Game *g, int disc) {
 
     // ARK only returns to VBOOT.PBP after the game if launcher mode is on during the game.
     if (platform_set_launcher_mode(1) != 0) return -1;
+    launch_mark_away(1);
 
     struct SceKernelLoadExecVSHParam param;
     int rc;
@@ -102,6 +109,7 @@ int launch_game(const Game *g, int disc) {
         break;
     }
     // Only reached when the firmware refused to start the game.
+    launch_mark_away(0);
     platform_set_launcher_mode(0);
     return rc < 0 ? rc : -1;
 }
@@ -109,6 +117,7 @@ int launch_game(const Game *g, int disc) {
 int launch_exit_to_xmb(void) {
     // If "launcher, on" cannot be cleared, exiting would boot straight back into Nemo.
     if (platform_set_launcher_mode(0) != 0) return -1;
+    launch_mark_away(1);
     sctrlKernelExitVSH(NULL);
     return -1;
 }
@@ -117,7 +126,9 @@ int launch_self(void) {
     snprintf(launch_path, sizeof launch_path, "%sVBOOT.PBP", platform_arkpath());
     struct SceKernelLoadExecVSHParam param;
     exec_param(&param, "game", launch_path);
+    launch_mark_away(1);
     sctrlKernelLoadExecVSHWithApitype(HOMEBREW_RUNLEVEL, launch_path, &param);
+    launch_mark_away(0);
     return -1;
 }
 
@@ -127,6 +138,8 @@ int launch_ark_menu(void) {
     if (platform_set_launcher_mode(0) != 0) return -2;
     struct SceKernelLoadExecVSHParam param;
     exec_param(&param, "game", launch_path);
+    launch_mark_away(1);
     sctrlKernelLoadExecVSHWithApitype(HOMEBREW_RUNLEVEL, launch_path, &param);
+    launch_mark_away(0);
     return -1;
 }

@@ -5,14 +5,14 @@ TEST_SRC   := $(wildcard tests/*.c)
 TEST_BIN   := build/run_tests
 HOST_CFLAGS := -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -g -O1 \
                -fsanitize=address,undefined -fno-omit-frame-pointer \
-               -Isrc/core -Ithird_party/cjson
+               -Isrc/core -Ithird_party/cjson -Ithird_party/dr_libs
 
 PSP_IMAGE  := pspdev/pspdev:latest
 CARD_DIR   := /media/schastlivyy/disk/PSP/SAVEDATA/ARK_01234
 # ARK-5 distribution in the project (same LANG.ARK as on the console)
 ARK_LANG   := ../FasterARK_psp_full/PSP/SAVEDATA/ARK_01234/LANG.ARK
 
-.PHONY: test fixtures psp xmblang install release clean
+.PHONY: test fixtures psp xmblang install release clean sounds
 
 test: fixtures $(TEST_BIN)
 	./$(TEST_BIN) $(T)
@@ -23,7 +23,13 @@ fixtures:
 
 $(TEST_BIN): $(CORE_SRC) $(TEST_SRC) $(wildcard src/core/*.h) tests/test.h
 	@mkdir -p build
-	cc $(HOST_CFLAGS) -o $@ $(CORE_SRC) $(TEST_SRC) -lz
+	cc $(HOST_CFLAGS) -o $@ $(CORE_SRC) $(TEST_SRC) -lz -lm
+
+# Interface sounds as WAV for listening on a PC (1.2.3)
+sounds:
+	@mkdir -p build/sounds
+	cc -std=c11 -O1 -Wall -Wextra -Werror -o build/render_sounds tools/render_sounds.c src/core/synth.c -lm
+	./build/render_sounds build/sounds
 
 # XMB item name "Nemo Launcher" (lang_ru.json / lang_en.json next to VBOOT.PBP)
 xmblang:
@@ -36,7 +42,11 @@ psp: xmblang
 	python3 tools/bin2c.py assets/fonts/Inter-SemiBold.ttf build/psp/gen/font_semibold.c font_semibold
 	python3 tools/bin2c.py assets/ncl_logo.png build/psp/gen/ncl_logo.c ncl_logo
 	python3 tools/bin2c.py assets/nemo_logo.png build/psp/gen/nemo_logo.c nemo_logo
+	python3 tools/bin2c.py assets/splash_c.png build/psp/gen/splash_c.c splash_c
+	python3 tools/bin2c.py assets/splash_ncl.png build/psp/gen/splash_ncl.c splash_ncl
 	python3 tools/bin2c.py assets/testers.txt build/psp/gen/testers_txt.c testers_txt
+	python3 tools/bin2c.py assets/changelog_ru.txt build/psp/gen/changelog_ru.c changelog_ru
+	python3 tools/bin2c.py assets/changelog_en.txt build/psp/gen/changelog_en.c changelog_en
 	python3 tools/credits_txt.py docs/CREDITS.md build/psp/gen/credits_ru.txt
 	python3 tools/credits_txt.py docs/CREDITS.en.md build/psp/gen/credits_en.txt
 	python3 tools/bin2c.py build/psp/gen/credits_ru.txt build/psp/gen/credits_ru.c credits_ru

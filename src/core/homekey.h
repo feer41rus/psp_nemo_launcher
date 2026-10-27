@@ -4,7 +4,7 @@
 #include <stdint.h>
 
 // HOME: a tap acts on release (go to Home), holding it opens the power window.
-#define HOME_HOLD_MS 1500       // author: 3 s felt too long
+#define HOME_HOLD_MS 1000       // author: 3 s, then 1.5 s felt too long (1.2.0)
 #define HOME_BAR_DELAY_MS 300
 
 typedef enum { HOME_NONE, HOME_TAP, HOME_HOLD } HomeEvent;

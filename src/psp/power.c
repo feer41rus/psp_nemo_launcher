@@ -1,5 +1,6 @@
 #include "power.h"
 #include "log.h"
+#include "platform.h"
 #include <kubridge.h>
 #include <pspkernel.h>
 #include <psppower.h>
@@ -76,12 +77,23 @@ static int kcall(void *f) {
 }
 
 // Listening clocks (measured on the device: lower values stutter).
+static int eq_active;
+static AudioFormat listen_fmt = AF_MP3;
+
 static void listening_clock(AudioFormat fmt) {
     // 111 MHz stuttered on the author's PSP with software MP3 decoding; 222 keeps headroom.
-    int mp3 = fmt == AF_MP3;
+    // The equalizer adds float filtering in the mixer: 266 then (1.2.1).
+    listen_fmt = fmt;
+    int mp3 = fmt == AF_MP3 && !eq_active;
     int cpu = mp3 ? 222 : 266, bus = mp3 ? 111 : 133;
     int rc = scePowerSetClockFrequency(cpu, cpu, bus);
     log_msg("power: clock %d/%d for %s rc=%d", cpu, bus, mp3 ? "mp3" : "other", rc);
+}
+
+void power_set_eq(int active) {
+    if (eq_active == active) return;
+    eq_active = active;
+    if (listening) listening_clock(listen_fmt);
 }
 
 void power_set_listening(int on, AudioFormat fmt) {
@@ -135,8 +147,10 @@ void power_shutdown(void) {
 
 void power_log_minute(AudioFormat fmt, unsigned underruns) {
     static const char *const NAMES[] = { "mp3", "flac", "ogg", "wav", "?" };
+    Status st;
+    platform_status(&st);   // sanitized battery (a firmware error code is not a percent)
     log_msg("power: cpu=%d bus=%d battery=%d%% charging=%d screen=%s fmt=%s underruns=%u",
-            scePowerGetCpuClockFrequency(), scePowerGetBusClockFrequency(), scePowerGetBatteryLifePercent(),
-            scePowerIsBatteryCharging(), screen_off ? "off" : "on", NAMES[fmt <= AF_UNKNOWN ? fmt : AF_UNKNOWN],
+            scePowerGetCpuClockFrequency(), scePowerGetBusClockFrequency(), st.battery_pct,
+            st.charging, screen_off ? "off" : "on", NAMES[fmt <= AF_UNKNOWN ? fmt : AF_UNKNOWN],
             underruns);
 }

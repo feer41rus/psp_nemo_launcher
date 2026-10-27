@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include "music.h"
 #include "queue.h"
+#include "eq.h"
 
 #define MD_MAX_PLAYLISTS 32
 #define MD_RECENT 50
@@ -24,6 +25,10 @@ typedef struct {
     int queue_pos;
     uint32_t position_ms;
     int shuffle, repeat;
+    int view;                 // library view: 0 albums, 1 artists, 2 folders (1.2.1), 3 all tracks (1.2.3)
+    int eq_on, eq_preset;     // equalizer switch and EqPreset (1.2.1)
+    int eq_custom[EQ_BANDS];  // "Custom" preset gains, dB
+    MPlaylist m3u_imported;   // lowercase paths of .m3u files already turned into playlists (or written by Nemo)
 } MusicData;
 
 void mdata_init(MusicData *d);

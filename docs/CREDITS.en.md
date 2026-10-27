@@ -22,7 +22,9 @@ Thanks to the projects Nemo Launcher is built on or learned from.
 ## Music
 - **MP3PlayerPlugin** by plum_429 — https://github.com/PSP-Archive/MP3PlayerPlugin (GPL-3.0) — background music in the XMB and games; the base of the planned in-game music plugin (1.2).
 - **vshbgm** by Koutsie — https://github.com/PSP-Archive/vshbgm (GPL-2.0) — background music in the VSH with `sceAudiocodec`.
+- **BatterySteve** by koutsie — https://github.com/koutsie/BatterySteve (no licence stated) — the idea of testing the real battery capacity by draining it under load (no code copied).
 - **pspmp3 / sceMp3** (PSPSDK, BSD) — https://github.com/pspdev/pspsdk — the hardware MP3 decoder (Media Engine).
+- **dr_flac** by David Reid — https://github.com/mackron/dr_libs (public domain or MIT-0) — FLAC decoder (v0.12.42, copied from SDL_mixer 2.8.1); SDL_mixer in pspdev is built without FLAC.
 - **The Mp3 Info Tag (LAME tag)** by Gabriel Bouvigne — http://gabriel.mp3-tech.org/mp3infotag.html — the Xing/Info and LAME tag format: frame count, seek TOC, encoder delay and padding for gapless playback.
 - **VBRI header** (Fraunhofer) — reference for parsing (no code copied).
 

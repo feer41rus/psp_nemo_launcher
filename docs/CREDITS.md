@@ -22,7 +22,9 @@
 ## Музыка
 - **MP3PlayerPlugin** от plum_429 — https://github.com/PSP-Archive/MP3PlayerPlugin (GPL-3.0) — фоновая музыка в XMB и играх; основа запланированного плагина музыки в играх (1.2).
 - **vshbgm** от Koutsie — https://github.com/PSP-Archive/vshbgm (GPL-2.0) — пример фоновой музыки в VSH на `sceAudiocodec`.
+- **BatterySteve** от koutsie — https://github.com/koutsie/BatterySteve (лицензия не указана) — идея теста реальной ёмкости аккумулятора разрядом под нагрузкой (код не копировался).
 - **pspmp3 / sceMp3** (PSPSDK, BSD) — https://github.com/pspdev/pspsdk — аппаратный декодер MP3 (Media Engine).
+- **dr_flac** от David Reid — https://github.com/mackron/dr_libs (public domain или MIT-0) — декодер FLAC (v0.12.42, копия из SDL_mixer 2.8.1); SDL_mixer в pspdev собран без FLAC.
 - **The Mp3 Info Tag (LAME tag)** от Gabriel Bouvigne — http://gabriel.mp3-tech.org/mp3infotag.html — формат Xing/Info и LAME-тега: число кадров, TOC для перемотки, задержка кодировщика и добивка для бесшовного воспроизведения.
 - **Заголовок VBRI** (Fraunhofer) — справочник для разбора (код не копировался).
 

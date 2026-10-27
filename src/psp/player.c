@@ -1,5 +1,6 @@
 #include "player.h"
 #include "hwmp3.h"
+#include "flacplay.h"
 #include "log.h"
 #include "platform.h"
 #include <SDL2/SDL.h>
@@ -19,6 +20,7 @@ static volatile uint32_t last_mix_ms;
 static int paused;
 static int fade = 100;
 static uint32_t started_ms;
+static EqState eq;                       // equalizer, applied after mixing (all three paths) (1.2.1)
 
 // Loader thread: Mix_LoadMUS scans the whole file, so it must not run on the UI thread.
 static SDL_Thread *loader;
@@ -38,6 +40,9 @@ static HwTrack *ready_hw;
 static int want_seek, ready_seek;         // a reopen of the current track at a new position (hw seek)
 static char ready_path[256], cur_path[256], cur_title[128];
 static int seek_pending;
+// FLAC path (flacplay.c, 1.2.0): SDL_mixer here has no FLAC.
+static int fl;                            // the current track plays through flacplay
+static FlacTrack *ready_fl;
 static uint32_t seek_target_ms;
 
 static int is_mp3(const char *path) {
@@ -45,15 +50,19 @@ static int is_mp3(const char *path) {
     return dot && strcasecmp(dot, ".mp3") == 0;
 }
 
+static int is_flac(const char *path) {
+    const char *dot = strrchr(path, '.');
+    return dot && strcasecmp(dot, ".flac") == 0;
+}
+
 static void on_finished(void) { finished = 1; }
 
 // Runs on the audio thread after every mixed chunk: measures gaps between chunks.
 static void post_mix(void *udata, Uint8 *stream, int len) {
     (void)udata;
-    (void)stream;
-    (void)len;
+    if (eq.active) eq_process(&eq, (int16_t *)stream, len / 4);
     uint32_t now = platform_ms();
-    int playing = (Mix_PlayingMusic() && !Mix_PausedMusic()) || (hw && !paused);
+    int playing = (Mix_PlayingMusic() && !Mix_PausedMusic()) || ((hw || fl) && !paused);
     if (last_mix_ms && playing && now - last_mix_ms > GAP_MS) underruns++;
     last_mix_ms = now;
 }
@@ -78,8 +87,11 @@ static int loader_main(void *unused) {
         SDL_UnlockMutex(load_lock);
         if (gen == done_gen) continue;           // a later post for a request we already served
         Mix_Music *m = NULL;
+        FlacTrack *f = is_flac(path) ? flacplay_open(path, start) : NULL;
         HwTrack *h = is_mp3(path) && hwmp3_init() == 0 ? hwmp3_open(path, start) : NULL;
-        if (!h) {
+        if (is_flac(path)) {
+            if (!f) log_msg("music: flac unsupported %s", path);
+        } else if (!h) {
             if (is_mp3(path)) log_msg("music: hw fallback to SDL_mixer: %s", path);
             m = Mix_LoadMUS(path);
             if (!m) log_msg("music: load failed %s: %s", path, Mix_GetError());
@@ -87,6 +99,7 @@ static int loader_main(void *unused) {
         SDL_LockMutex(load_lock);
         ready_music = m;
         ready_hw = h;
+        ready_fl = f;
         ready_seek = seek;
         memcpy(ready_path, path, sizeof ready_path);
         ready_gen = gen;
@@ -111,24 +124,34 @@ static int open_audio(void) {
     return 0;
 }
 
-int player_init(void) {
+int player_audio_open(void) {
+    if (opened) return 0;
     if (SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) {
         log_msg("player: SDL audio init failed: %s", SDL_GetError());
         return -1;
     }
+    return open_audio();
+}
+
+int player_init(void) {
+    if (player_audio_open() != 0) return -1;
     int got = Mix_Init(MIX_INIT_MP3 | MIX_INIT_FLAC | MIX_INIT_OGG);
     log_msg("player: Mix_Init formats 0x%x", got);
     load_sem = SDL_CreateSemaphore(0);
     load_lock = SDL_CreateMutex();
     loader = SDL_CreateThread(loader_main, "nemo_music_load", NULL);
     if (!loader) log_msg("player: loader thread failed: %s", SDL_GetError());
-    return open_audio();
+    return 0;
 }
 
 void player_stop(void) {
     if (hw) {
         hwmp3_stop();
         hw = 0;
+    }
+    if (fl) {
+        flacplay_stop();
+        fl = 0;
     }
     if (music) {
         Mix_HaltMusic();
@@ -164,6 +187,7 @@ int player_poll(void) {
     SDL_LockMutex(load_lock);
     Mix_Music *m = ready_music;
     HwTrack *h = ready_hw;
+    FlacTrack *f = ready_fl;
     int seek = ready_seek;
     uint32_t gen = ready_gen, start = ready_start_ms;
     char title[128], path[256];
@@ -171,28 +195,56 @@ int player_poll(void) {
     memcpy(path, ready_path, sizeof path);
     ready_music = NULL;
     ready_hw = NULL;
+    ready_fl = NULL;
     ready = 0;
     int stale = gen != want_gen;
     SDL_UnlockMutex(load_lock);
     if (stale) {                                 // superseded by a newer request
         if (m) Mix_FreeMusic(m);
         hwmp3_discard(h);
+        flacplay_discard(f);
         return 0;
     }
     if (seek) seek_pending = 0;
-    if (!m && !h) return seek ? 0 : -1;
+    if (!m && !h && !f) return seek ? 0 : -1;
     if (!opened && open_audio() != 0) {
         if (m) Mix_FreeMusic(m);
         hwmp3_discard(h);
+        flacplay_discard(f);
         return -1;
     }
     memcpy(cur_path, path, sizeof cur_path);
     memcpy(cur_title, title, sizeof cur_title);
+    if (f) {
+        if (music) {                             // an SDL_mixer track ends here
+            Mix_HaltMusic();
+            Mix_FreeMusic(music);
+            music = NULL;
+        }
+        if (hw) {
+            hwmp3_stop();
+            hw = 0;
+        }
+        flacplay_set_volume(fade);
+        flacplay_start(f);                       // releases the previous FLAC track
+        fl = 1;
+        finished = 0;
+        paused = 0;
+        last_mix_ms = 0;
+        if (!seek) started_ms = platform_ms();
+        log_msg("music: play \"%s\" from %u ms (duration %u ms) path=flac%s", title, (unsigned)start,
+                (unsigned)flacplay_duration_ms(), seek ? " (seek)" : "");
+        return seek ? 0 : 1;
+    }
     if (h) {
         if (music) {                             // an SDL_mixer track ends here
             Mix_HaltMusic();
             Mix_FreeMusic(music);
             music = NULL;
+        }
+        if (fl) {
+            flacplay_stop();
+            fl = 0;
         }
         hwmp3_set_volume(fade);
         hwmp3_start(h);                          // releases the previous hw track
@@ -225,6 +277,7 @@ int player_poll(void) {
 
 void player_pause(int p) {
     if (hw) hwmp3_pause(p);
+    else if (fl) flacplay_pause(p);
     else if (!music) return;
     else if (p) Mix_PauseMusic();
     else Mix_ResumeMusic();
@@ -232,13 +285,14 @@ void player_pause(int p) {
     last_mix_ms = 0;
 }
 
-int player_paused(void) { return (music || hw) && paused; }
-int player_active(void) { return music != NULL || hw; }
+int player_paused(void) { return (music || hw || fl) && paused; }
+int player_active(void) { return music != NULL || hw || fl; }
 uint32_t player_started_ms(void) { return started_ms; }
 
 uint32_t player_position_ms(void) {
     if (seek_pending) return seek_target_ms;     // hw seek: the reopen is on its way
     if (hw) return hwmp3_position_ms();
+    if (fl) return flacplay_position_ms();
     if (!music) return 0;
     double s = Mix_GetMusicPosition(music);
     return s > 0 ? (uint32_t)(s * 1000.0) : 0;
@@ -246,14 +300,15 @@ uint32_t player_position_ms(void) {
 
 uint32_t player_duration_ms(void) {
     if (hw) return hwmp3_duration_ms();
+    if (fl) return flacplay_duration_ms();
     if (!music) return 0;
     double s = Mix_MusicDuration(music);
     return s > 0 ? (uint32_t)(s * 1000.0) : 0;
 }
 
 void player_seek_ms(uint32_t ms) {
-    if (hw) {                                    // reopen at the new place (header + TOC, no scan)
-        uint32_t dur = hwmp3_duration_ms();
+    if (hw || fl) {                              // reopen at the new place (header + TOC / FLAC seek table)
+        uint32_t dur = hw ? hwmp3_duration_ms() : flacplay_duration_ms();
         if (dur > 2000 && ms > dur - 1000) ms = dur - 1000;   // past the end restarted the track before
         seek_target_ms = ms;
         seek_pending = 1;
@@ -270,13 +325,22 @@ void player_set_fade(int percent) {
     fade = percent;
     Mix_VolumeMusic(MIX_MAX_VOLUME * fade / 100);
     hwmp3_set_volume(fade);
+    flacplay_set_volume(fade);
 }
 
 int player_take_finished(void) {
     if (hw) return hwmp3_take_finished();
+    if (fl) return flacplay_take_finished();
     if (!finished) return 0;
     finished = 0;
     return 1;
 }
 
-uint32_t player_underruns(void) { return underruns + hwmp3_starved(); }
+void player_set_eq(const int gains[EQ_BANDS], int on) {
+    static const int flat[EQ_BANDS] = { 0 };
+    SDL_LockAudio();                             // the mixer callback reads eq
+    eq_design(&eq, on ? gains : flat, AUDIO_RATE);
+    SDL_UnlockAudio();
+}
+
+uint32_t player_underruns(void) { return underruns + hwmp3_starved() + flacplay_starved(); }

@@ -24,3 +24,7 @@ void device_fw_string(uint32_t devkit, char *buf, size_t cap) {
     snprintf(buf, cap, "%u.%u%u", (unsigned)(devkit >> 24) & 0xFF, (unsigned)(devkit >> 16) & 0xFF,
              (unsigned)(devkit >> 8) & 0xFF);
 }
+
+int battery_sanitize(int raw, int prev) {
+    return raw >= 0 && raw <= 100 ? raw : prev;
+}

@@ -13,5 +13,8 @@ int device_has_wifi(int model);
 void device_gen_string(int model, char *buf, size_t cap);
 // sceKernelDevkitVersion() 0xMMmmPP10 -> "M.mP", e.g. 0x06060110 -> "6.61".
 void device_fw_string(uint32_t devkit, char *buf, size_t cap);
+// Battery percent from the firmware: 0..100 is taken; anything else (an error code such as 0x802B0100)
+// keeps prev (-1 = no data yet).
+int battery_sanitize(int raw, int prev);
 
 #endif

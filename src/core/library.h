@@ -25,6 +25,11 @@ typedef struct {
     int site;          // nemoleague.ru in "About Nemo" (default on)
     int show_music;    // Music tab; off = music stopped and unloaded (default on)
     int replace_xmb;   // Nemo instead of XMB (1.1.11, default off)
+    int dbg_ram, dbg_cpu, dbg_fps;   // Settings › System › Debug: debug box rows (1.2.0, default off)
+    int log_keep;      // runs of nemo.log to keep: 0 (no log), 2, 5, 10, 20 (1.2.0, default 2)
+    int splash_hello;  // welcome splash at power-on (1.2.3, default on)
+    int splash_ncl;    // NCL thank-you splash: shown once at the next power-on, then off (1.2.3, default off)
+    int ui_sounds;     // interface clicks (1.2.3, default on)
 } NemoSettings;
 
 void library_settings_defaults(NemoSettings *s);
@@ -44,6 +49,8 @@ typedef struct {
 void library_init(Library *l);
 int library_load(Library *l, const char *path);        // 0 ok or missing file; -1 corrupt (reset)
 int library_save(const Library *l, const char *path);  // tmp + rename; creates parent dirs
+// settings.log_keep straight from the file, before the log is opened (LOG_KEEP_DEFAULT when absent/bad).
+int library_peek_log_keep(const char *path);
 
 int library_folder_create(Library *l, const char *name);           // index, -1 empty/dup/full
 int library_folder_rename(Library *l, int idx, const char *name);  // 0, -1 empty/dup

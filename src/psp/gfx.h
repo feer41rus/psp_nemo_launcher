@@ -32,12 +32,16 @@ int gfx_screenshot(const char *path);
 
 void gfx_text(FontId f, int x, int y, uint32_t rgba, const char *utf8);
 int gfx_text_width(FontId f, const char *utf8);
+// platform_ms() just before the last present (which waits for vsync): frame work ends there.
+uint32_t gfx_present_ms(void);
 int gfx_text_height(FontId f);
 // Draw text clipped to max_w pixels, ending with "…" when it does not fit.
 void gfx_text_fit(FontId f, int x, int y, int max_w, uint32_t rgba, const char *utf8);
 
 void gfx_rect(int x, int y, int w, int h, uint32_t rgba);
 void gfx_round_rect(int x, int y, int w, int h, int r, uint32_t rgba);
+void gfx_disc(int cx, int cy, int r, uint32_t rgba);     // filled circle
+void gfx_circle(int cx, int cy, int r, uint32_t rgba);   // anti-aliased ring
 void gfx_round_rect_outline(int x, int y, int w, int h, int r, uint32_t rgba);
 void gfx_gradient_v(int x, int y, int w, int h, uint32_t top, uint32_t bottom);
 void gfx_gradient_h(int x, int y, int w, int h, uint32_t left, uint32_t right);

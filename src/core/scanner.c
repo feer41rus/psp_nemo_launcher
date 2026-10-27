@@ -6,6 +6,7 @@
 #include "safefile.h"
 #include "sfo.h"
 #include "utf8.h"
+#include "sjis.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -15,7 +16,7 @@
 #include <sys/stat.h>
 
 #define ISO_MAX_DEPTH 3
-#define SCAN_CACHE_VERSION 1
+#define SCAN_CACHE_VERSION 2   // 2: titles from Shift-JIS file names converted (1.2.1)
 
 static const char *const HIDDEN_FOLDERS[] = { "NPUZ01234", "SCPS10084", "ARK_Loader" };
 
@@ -69,7 +70,7 @@ static void set_id(Game *g) {
 
 // Title fallback: file or folder name without extension.
 static void name_title(Game *g, const char *name) {
-    utf8_copy(g->title, sizeof g->title, name);
+    sjis_to_utf8(name, g->title, sizeof g->title);   // the PSP lists names in Shift-JIS
     char *dot = strrchr(g->title, '.');
     if (dot && dot != g->title) *dot = '\0';
 }

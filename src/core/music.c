@@ -2,6 +2,7 @@
 #include "cJSON.h"
 #include "safefile.h"
 #include "utf8.h"
+#include "sjis.h"
 #include <ctype.h>
 #include <dirent.h>
 #include <stdio.h>
@@ -11,7 +12,7 @@
 #include <sys/stat.h>
 
 #define MUSIC_MAX_DEPTH 4
-#define MUSIC_CACHE_VERSION 1
+#define MUSIC_CACHE_VERSION 2   // 2: titles/albums from Shift-JIS file names converted (1.2.1)
 
 typedef struct {
     char path[256];
@@ -35,6 +36,7 @@ void musiclib_init(MusicLib *l) { memset(l, 0, sizeof *l); }
 void musiclib_free(MusicLib *l) {
     free(l->tracks);
     free(l->albums);
+    free(l->m3u);
     memset(l, 0, sizeof *l);
 }
 
@@ -73,7 +75,7 @@ static MCacheEntry *push_entry(MCacheList *l) {
 void music_title_from_filename(const char *path, char *out, size_t cap) {
     const char *name = strrchr(path, '/');
     name = name ? name + 1 : path;
-    utf8_copy(out, cap, name);
+    sjis_to_utf8(name, out, cap);   // the PSP lists names in Shift-JIS
     char *dot = strrchr(out, '.');
     if (dot && dot != out) *dot = '\0';
     for (char *p = out; *p; p++)
@@ -91,7 +93,7 @@ static void folder_name(const char *path, char *out, size_t cap) {
     if (n >= sizeof tmp) n = sizeof tmp - 1;
     memcpy(tmp, start, n);
     tmp[n] = '\0';
-    utf8_copy(out, cap, tmp);
+    sjis_to_utf8(tmp, out, cap);
 }
 
 static void parse_track(Track *t, const char *path, AudioFormat fmt) {
@@ -115,8 +117,29 @@ static void parse_track(Track *t, const char *path, AudioFormat fmt) {
     if (!t->album[0]) folder_name(path, t->album, sizeof t->album);
 }
 
+static int is_playlist_file(const char *name) {
+    const char *dot = strrchr(name, '.');
+    return dot && (strcasecmp(dot, ".m3u") == 0 || strcasecmp(dot, ".m3u8") == 0);
+}
+
+static void add_m3u(MusicLib *l, const char *path) {
+    if (strlen(path) >= sizeof l->m3u[0]) return;
+    if (l->m3u_count == l->m3u_cap) {
+        int cap = l->m3u_cap ? l->m3u_cap * 2 : 8;
+        char (*m)[256] = realloc(l->m3u, (size_t)cap * sizeof *m);
+        if (!m) return;
+        l->m3u = m;
+        l->m3u_cap = cap;
+    }
+    strcpy(l->m3u[l->m3u_count++], path);
+}
+
 static void visit(MScan *s, const char *path) {
     const char *name = strrchr(path, '/');
+    if (is_playlist_file(name ? name + 1 : path)) {
+        add_m3u(s->lib, path);
+        return;
+    }
     AudioFormat fmt = audio_format_from_name(name ? name + 1 : path);
     if (fmt == AF_UNKNOWN || strlen(path) >= sizeof s->lib->tracks[0].path) return;
     struct stat st;

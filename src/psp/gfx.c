@@ -5,6 +5,7 @@
 #include <string.h>
 #include <pspdisplay.h>
 #include "utf8.h"
+#include "platform.h"
 
 extern const unsigned char font_regular[], font_semibold[];
 extern const unsigned int font_regular_size, font_semibold_size;
@@ -112,7 +113,14 @@ void gfx_frame_begin(void) {
     SDL_RenderClear(renderer);
 }
 
-void gfx_frame_end(void) { SDL_RenderPresent(renderer); }
+static uint32_t present_ms;
+
+void gfx_frame_end(void) {
+    present_ms = platform_ms();
+    SDL_RenderPresent(renderer);
+}
+
+uint32_t gfx_present_ms(void) { return present_ms; }
 
 // SDL's PSP renderer does not implement SDL_RenderReadPixels, so read the framebuffer that is
 // on screen right now. Call right after gfx_frame_end().
@@ -241,6 +249,9 @@ void gfx_text_fit(FontId f, int x, int y, int max_w, uint32_t rgba, const char *
 }
 
 void gfx_rect(int x, int y, int w, int h, uint32_t rgba) {
+    // SDL2_gfx primitives leave the blend mode at NONE after an opaque shape: set it every time, or a
+    // translucent rect after one is drawn wrong (power window dim worked only in Settings, 1.2.0).
+    SDL_SetRenderDrawBlendMode(renderer, A(rgba) < 255 ? SDL_BLENDMODE_BLEND : SDL_BLENDMODE_NONE);
     SDL_SetRenderDrawColor(renderer, R(rgba), G(rgba), B(rgba), A(rgba));
     SDL_Rect r = { x, y, w, h };
     SDL_RenderFillRect(renderer, &r);
@@ -248,6 +259,14 @@ void gfx_rect(int x, int y, int w, int h, uint32_t rgba) {
 
 void gfx_round_rect(int x, int y, int w, int h, int r, uint32_t rgba) {
     roundedBoxRGBA(renderer, x, y, x + w - 1, y + h - 1, r, R(rgba), G(rgba), B(rgba), A(rgba));
+}
+
+void gfx_disc(int cx, int cy, int r, uint32_t rgba) {
+    filledCircleRGBA(renderer, cx, cy, r, R(rgba), G(rgba), B(rgba), A(rgba));
+}
+
+void gfx_circle(int cx, int cy, int r, uint32_t rgba) {
+    aacircleRGBA(renderer, cx, cy, r, R(rgba), G(rgba), B(rgba), A(rgba));
 }
 
 void gfx_round_rect_outline(int x, int y, int w, int h, int r, uint32_t rgba) {

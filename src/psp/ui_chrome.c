@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "sfx.h"
 #include "gfx.h"
 #include "platform.h"
 #include <stdio.h>
@@ -11,6 +12,8 @@ static const StrId TAB_NAMES[TAB_COUNT] = {
 void ui_toast(App *app, const char *msg) {
     snprintf(app->toast, sizeof app->toast, "%s", msg);
     app->toast_until = app->now_ms + 3000;
+    UiSndGate g = sfx_gate(app);
+    sfx_play(uisnd_toast(&app->snd, &g, app->now_ms));
 }
 
 extern const unsigned char ncl_logo[];

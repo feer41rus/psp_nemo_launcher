@@ -4,6 +4,7 @@
 #include "gfx.h"
 #include "player.h"
 #include "queue.h"
+#include "sjis.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -122,7 +123,56 @@ static int scroll_for(float *scroll, int sel, int visible) {
     if (sel < target) target = (float)sel;
     if (sel >= target + visible) target = (float)(sel - visible + 1);
     *scroll = ease(*scroll, target);
-    return (int)(*scroll + 0.5f);
+    return mnav_first_visible(*scroll, sel, visible);
+}
+
+static const StrId VIEW_NAMES[4] = { S_MUSIC_ALBUMS, S_MUSIC_ARTISTS, S_MUSIC_FOLDERS, S_MUSIC_ALL_TRACKS };
+
+static int album_of_track(const App *a, int t) {
+    for (int i = 0; i < a->mlib.album_count; i++) {
+        const Album *al = &a->mlib.albums[i];
+        if (t >= al->first && t < al->first + al->count) return i;
+    }
+    return -1;
+}
+
+// Small icons drawn with primitives (the trimmed Inter font has no note/folder glyphs).
+static void icon_artist(int x, int y, int s, uint32_t col) {
+    gfx_disc(x + s / 2, y + s * 3 / 10, s / 4 > 1 ? s / 4 : 1, col);
+    gfx_round_rect(x + s / 5, y + s * 3 / 5, s * 3 / 5, s * 2 / 5, s / 5 > 1 ? s / 5 : 1, col);
+}
+
+static void icon_folder(int x, int y, int s, uint32_t col) {
+    gfx_round_rect(x, y + s / 6, s * 2 / 5, s / 4, 1, col);
+    gfx_round_rect(x, y + s / 3, s, s * 2 / 3, 2, col);
+}
+
+static void icon_list(int x, int y, int s, uint32_t col) {
+    for (int k = 0; k < 3; k++) gfx_rect(x + 1, y + 2 + k * (s / 3), s - 2, 2, col);
+}
+
+static void side_icon(const App *a, SideKind k, int idx, int x, int y) {
+    switch (k) {
+    case SIDE_ALBUM: ui_music_cover(a, idx, x + 4, y + 2, 11); break;
+    case SIDE_ARTIST: icon_artist(x + 4, y + 2, 11, COL_MUTED); break;
+    case SIDE_FOLDER: icon_folder(x + 4, y + 2, 11, 0xffcf5aff); break;
+    case SIDE_FOLDER_UP: gfx_text(FONT_SMALL, x + 6, y + 1, COL_MUTED, "↑"); break;
+    case SIDE_ALL: icon_list(x + 4, y + 2, 11, COL_ACCENT); break;
+    default:
+        gfx_text(FONT_SMALL, x + 5, y + 1, k == SIDE_FAVORITES ? 0xffcf5aff : COL_MUTED,
+                 k == SIDE_FAVORITES ? "★" : k == SIDE_RECENT ? "↻" : "•");
+        break;
+    }
+}
+
+// "MUSIC › Low Roar › EP & Singles" for the current folder (UTF-8 folder names, root first).
+static void folder_crumb(const App *a, char *out, size_t cap) {
+    int chain[16], depth = 0;
+    for (int f = a->mnav.folder; f > 0 && f < a->folders.count && depth < 16; f = a->folders.folders[f].parent)
+        chain[depth++] = f;
+    size_t n = (size_t)snprintf(out, cap, "MUSIC");
+    while (depth-- > 0 && n < cap)
+        n += (size_t)snprintf(out + n, cap - n, " › %s", folders_name(&a->folders, chain[depth]));
 }
 
 static void draw_library(App *a) {
@@ -130,53 +180,141 @@ static void draw_library(App *a) {
     int top = TOP_BAR_H + 6, bottom = SCREEN_H - HINT_BAR_H - MINI_H - 6;
     int sides = music_side_count(a);
 
-    // Left column: "Albums" + albums, "Playlists" + Favorites, Recent, user playlists.
-    int list_y = top, visible = (bottom - list_y) / ROW_H - 2;
+    // Left column: view name + "□ n/3", (folders: path), then the entries of the view.
+    int y = top;
+    gfx_text(FONT_SMALL, SIDE_X + 6, y + 2, COL_MUTED, tr(VIEW_NAMES[n->view]));
+    {
+        char vb[16];
+        snprintf(vb, sizeof vb, "%d/4", n->view + 1);
+        int bw = 18 + gfx_text_width(FONT_TINY, vb), bx = SIDE_X + SIDE_W - bw - 2;
+        gfx_round_rect(bx, y + 1, bw, 13, 6, 0x24324aff);
+        gfx_button_glyph(GLYPH_SQUARE, bx + 7, y + 7, 9);
+        gfx_text(FONT_TINY, bx + 14, y + 2, 0xcfd8e3ff, vb);
+    }
+    y += ROW_H;
+    if (n->view == 2) {
+        char crumb[200];
+        folder_crumb(a, crumb, sizeof crumb);
+        gfx_text_fit(FONT_SMALL, SIDE_X + 6, y + 2, SIDE_W - 10, COL_TEXT, crumb);
+        y += ROW_H;
+    }
+    int visible = (bottom - y) / ROW_H - (n->view == 2 ? 0 : 1);
     int first = scroll_for(&a->music_scroll[0], n->side_sel, visible);
-    int y = list_y;
     for (int i = first; i < sides && y + ROW_H <= bottom; i++) {
         int idx;
         SideKind k = music_side_kind(a, i, &idx);
-        if (i == first || (k == SIDE_FAVORITES)) {      // section headers
-            if (k == SIDE_ALBUM || k == SIDE_FAVORITES) {
-                gfx_text(FONT_SMALL, SIDE_X + 6, y + 2, COL_MUTED, tr(k == SIDE_ALBUM ? S_MUSIC_ALBUMS : S_MUSIC_PLAYLISTS));
-                y += ROW_H;
-            }
+        if (k == SIDE_FAVORITES) {                    // section header before the playlists
+            gfx_text(FONT_SMALL, SIDE_X + 6, y + 2, COL_MUTED, tr(S_MUSIC_PLAYLISTS));
+            y += ROW_H;
+            if (y + ROW_H > bottom) break;
         }
         int sel = i == n->side_sel;
         if (sel) gfx_round_rect(SIDE_X, y, SIDE_W, ROW_H - 2, 4, n->column == 0 ? 0x2b5fa8ff : 0x24324aff);
-        if (k == SIDE_ALBUM) ui_music_cover(a, idx, SIDE_X + 4, y + 2, 11);
-        else gfx_text(FONT_SMALL, SIDE_X + 5, y + 1, k == SIDE_FAVORITES ? 0xffcf5aff : COL_MUTED,
-                      k == SIDE_FAVORITES ? "★" : k == SIDE_RECENT ? "↻" : "•");
+        side_icon(a, k, idx, SIDE_X, y);
         gfx_text_fit(FONT_SMALL, SIDE_X + 20, y + 1, SIDE_W - 24, COL_TEXT, music_side_name(a, i));
         y += ROW_H;
     }
 
-    // Right panel: the selected album or playlist.
+    // Right panel: what the selected entry holds.
     int px = PANEL_X, pw = SCREEN_W - PANEL_X - 8;
     gfx_round_rect(px, top - 2, pw, bottom - top + 4, 8, 0x141b26ff);
+    if (sides == 0) { draw_mini_player(a); return; }
     int idx;
     SideKind kind = music_side_kind(a, n->side_sel, &idx);
+    char info[200], count[32];
+    int ty = top + 44, tvis = (bottom - ty) / ROW_H;
+
+    if (kind == SIDE_ARTIST && n->artist_open < 0) {   // artist overview: "All tracks" + albums
+        const MArtist *ar = &a->artists.artists[idx];
+        gfx_round_rect(px + 6, top + 4, 34, 34, 6, 0x24324aff);
+        icon_artist(px + 12, top + 10, 22, COL_ACCENT);
+        snprintf(info, sizeof info, tr(S_MUSIC_ARTIST_INFO), ar->album_count, ar->track_count);
+        gfx_text_fit(FONT_BOLD, px + 46, top + 4, pw - 52, COL_TEXT, music_side_name(a, n->side_sel));
+        gfx_text_fit(FONT_SMALL, px + 46, top + 22, pw - 52, COL_MUTED, info);
+        int rows = 1 + ar->album_count;
+        int tfirst = scroll_for(&a->music_scroll[1], n->track_sel, tvis);
+        for (int r = tfirst; r < rows && r < tfirst + tvis; r++) {
+            int ry = ty + (r - tfirst) * ROW_H, sel = n->column == 1 && r == n->track_sel;
+            if (sel) gfx_round_rect(px + 4, ry, pw - 8, ROW_H - 2, 4, 0x2b5fa8ff);
+            char name[200];
+            int cnt;
+            if (r == 0) {
+                icon_list(px + 10, ry + 2, 11, COL_ACCENT);
+                snprintf(name, sizeof name, "%s", tr(S_MUSIC_ALL_TRACKS));
+                cnt = ar->track_count;
+            } else {
+                int al_i = a->artists.albums[ar->album_first + r - 1];
+                const Album *al = &a->mlib.albums[al_i];
+                ui_music_cover(a, al_i, px + 10, ry + 2, 11);
+                if (al->year) snprintf(name, sizeof name, "%s · %d", al->title, al->year);
+                else snprintf(name, sizeof name, "%s", al->title);
+                cnt = al->count;
+            }
+            snprintf(count, sizeof count, "%d", cnt);
+            int cw = gfx_text_width(FONT_SMALL, count);
+            gfx_text_fit(FONT_SMALL, px + 28, ry + 1, pw - 44 - cw, COL_TEXT, name);
+            gfx_text(FONT_SMALL, px + pw - 10 - cw, ry + 1, sel ? COL_TEXT : COL_MUTED, count);
+        }
+        draw_mini_player(a);
+        return;
+    }
+
     const int *tracks;
     int count_n = music_side_tracks(a, n->side_sel, &tracks);
-    char info[200], count[32];
     snprintf(count, sizeof count, tr(S_MUSIC_TRACKS_N), count_n);
+    const char *title = music_side_name(a, n->side_sel);
+    int numbered = kind == SIDE_ALBUM;                  // tag track numbers; folders show file names
     if (kind == SIDE_ALBUM) {
         const Album *al = &a->mlib.albums[idx];
         ui_music_cover(a, idx, px + 6, top + 4, 34);
         const char *artist = al->artist[0] ? al->artist : tr(S_MUSIC_UNKNOWN_ARTIST);
         if (al->year) snprintf(info, sizeof info, "%s · %d · %s", artist, al->year, count);
         else snprintf(info, sizeof info, "%s · %s", artist, count);
+    } else if (kind == SIDE_ARTIST) {                   // an opened album or "All tracks" of the artist
+        const MArtist *ar = &a->artists.artists[idx];
+        const char *who = ar->name[0] ? ar->name : tr(S_MUSIC_UNKNOWN_ARTIST);
+        if (n->artist_open == 0) {
+            gfx_round_rect(px + 6, top + 4, 34, 34, 6, 0x24324aff);
+            icon_list(px + 13, top + 12, 20, COL_ACCENT);
+            title = tr(S_MUSIC_ALL_TRACKS);
+            snprintf(info, sizeof info, "%s · %s", who, count);
+        } else {
+            int al_i = a->artists.albums[ar->album_first + n->artist_open - 1];
+            const Album *al = &a->mlib.albums[al_i];
+            ui_music_cover(a, al_i, px + 6, top + 4, 34);
+            title = al->title;
+            numbered = 1;
+            if (al->year) snprintf(info, sizeof info, "%s · %d · %s", who, al->year, count);
+            else snprintf(info, sizeof info, "%s · %s", who, count);
+        }
+    } else if (kind == SIDE_FOLDER || kind == SIDE_FOLDER_UP) {
+        int al_i = count_n > 0 ? album_of_track(a, tracks[0]) : -1;
+        if (al_i >= 0) ui_music_cover(a, al_i, px + 6, top + 4, 34);
+        else {
+            gfx_round_rect(px + 6, top + 4, 34, 34, 6, 0x24324aff);
+            icon_folder(px + 12, top + 10, 22, 0xffcf5aff);
+        }
+        if (count_n > 0) {
+            snprintf(info, sizeof info, "%s", count);
+        } else {
+            int kids[MUSIC_FOLDER_KIDS];
+            int f = kind == SIDE_FOLDER ? idx : 0;
+            snprintf(info, sizeof info, tr(S_MUSIC_FOLDER_INFO), folders_children(&a->folders, f, kids, MUSIC_FOLDER_KIDS));
+        }
+    } else if (kind == SIDE_ALL) {
+        gfx_round_rect(px + 6, top + 4, 34, 34, 6, 0x24324aff);
+        icon_list(px + 13, top + 12, 20, COL_ACCENT);
+        snprintf(info, sizeof info, "%s", count);
     } else {
         gfx_round_rect(px + 6, top + 4, 34, 34, 6, 0x24324aff);
         gfx_text(FONT_TITLE, px + 14, top + 9, kind == SIDE_FAVORITES ? 0xffcf5aff : COL_ACCENT,
                  kind == SIDE_FAVORITES ? "★" : kind == SIDE_RECENT ? "↻" : "•");
         snprintf(info, sizeof info, "%s", count);
     }
-    gfx_text_fit(FONT_BOLD, px + 46, top + 4, pw - 52, COL_TEXT, music_side_name(a, n->side_sel));
+    gfx_text_fit(FONT_BOLD, px + 46, top + 4, pw - 52, COL_TEXT, title);
     gfx_text_fit(FONT_SMALL, px + 46, top + 22, pw - 52, COL_MUTED, info);
+    if (count_n == 0 && kind == SIDE_FOLDER) gfx_text_fit(FONT_SMALL, px + 10, ty + 1, pw - 20, COL_MUTED, tr(S_MUSIC_FOLDER_EMPTY));
 
-    int ty = top + 44, tvis = (bottom - ty) / ROW_H;
     int tfirst = scroll_for(&a->music_scroll[1], n->track_sel, tvis);
     int playing = queue_current(&a->queue);
     for (int i = tfirst; i < count_n && i < tfirst + tvis; i++) {
@@ -187,10 +325,21 @@ static void draw_library(App *a) {
         int is_playing = tracks[i] == playing && player_active();
         uint32_t col = is_playing && !sel ? COL_ACCENT : COL_TEXT;
         char no[16];
-        snprintf(no, sizeof no, "%d", kind == SIDE_ALBUM && t->track_no ? t->track_no : i + 1);
+        snprintf(no, sizeof no, "%d", numbered && t->track_no ? t->track_no : i + 1);
         if (is_playing) gfx_button_glyph(GLYPH_NOTE, px + 14, ry + 7, 10);
-        else gfx_text(FONT_SMALL, px + 10, ry + 1, COL_MUTED, no);
-        gfx_text_fit(FONT_SMALL, px + 28, ry + 1, pw - 36, col, t->title);
+        else if (kind != SIDE_ALL) gfx_text(FONT_SMALL, px + 10, ry + 1, COL_MUTED, no);   // 4-digit numbers would overlap
+        const char *label = t->title;
+        char file[240];
+        if (kind == SIDE_ALL && t->artist[0]) {          // the whole library: who sings it
+            snprintf(file, sizeof file, "%s · %s", t->title, t->artist);
+            label = file;
+        }
+        if (kind == SIDE_FOLDER) {                      // as on the card: the file name (listed in Shift-JIS)
+            const char *slash = strrchr(t->path, '/');
+            sjis_to_utf8(slash ? slash + 1 : t->path, file, sizeof file);
+            label = file;
+        }
+        gfx_text_fit(FONT_SMALL, px + 28, ry + 1, pw - 36, col, label);
     }
     draw_mini_player(a);
 }

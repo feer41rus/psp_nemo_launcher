@@ -25,6 +25,8 @@ typedef struct {
     int track_count, track_cap;
     Album *albums;
     int album_count, album_cap;
+    char (*m3u)[256];                   // .m3u / .m3u8 files found by the scan (1.2.1)
+    int m3u_count, m3u_cap;
 } MusicLib;
 
 void musiclib_init(MusicLib *l);

@@ -25,3 +25,4 @@ docs/*
 
 # Host unit tests (kept locally, not published)
 tests/
+.superpowers/

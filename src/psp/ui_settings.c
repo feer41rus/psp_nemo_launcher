@@ -14,6 +14,8 @@
 
 #include "version.h"
 #include "device.h"
+#include "logrot.h"
+#include "battery_hw.h"
 
 #define ROW_H 28
 #define VISIBLE_ROWS 7          // author: smaller version line, one more row
@@ -26,7 +28,6 @@
 #define PS_DIR "/CONFIG/SYSTEM/POWER_SAVING"
 #define LANG_REG_RU 8
 #define LANG_REG_EN 1
-#define IMPOSE_BRIGHTNESS 0x02
 #define IMPOSE_LANGUAGE 0x80
 #define NICK_MAX 25
 
@@ -114,6 +115,8 @@ static void step_choice(App *a, const int *choices, int n, int *value, const cha
 }
 
 static void change_ark(App *a, SetId id, int delta);
+static int pick_current(const App *a, SetId id);
+static void pick_apply(App *a, SetId id, int i);
 
 static void change(App *a, SetId id, int delta) {
     switch (id) {
@@ -124,6 +127,9 @@ static void change(App *a, SetId id, int delta) {
     }
     case SID_TIME_FORMAT:
         if (set_reg(a, "time_format", !a->time_h12) == 0) a->time_h12 = !a->time_h12;
+        break;
+    case SID_LOG_KEEP:                        // ←/→ step through Off / 2 / 5 / 10 / 20, like the drop-down
+        pick_apply(a, id, (pick_current(a, id) + delta + LOG_KEEP_CHOICE_COUNT) % LOG_KEEP_CHOICE_COUNT);
         break;
     case SID_TIMEZONE: {
         int i = zone_index(a->tz_minutes);
@@ -163,15 +169,27 @@ static void change(App *a, SetId id, int delta) {
         else if (s->replace_xmb) ui_toast(a, tr(S_RX_ON_NOTE));
         break;
     }
-    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: {
+    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC:
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: {
         NemoSettings *s = &a->lib->settings;
         int *f = id == SID_SHOW_XMB_EXIT ? &s->xmb_exit : id == SID_NCL_LOGO ? &s->ncl_logo : id == SID_SITE ? &s->site
-                                                                                                   : &s->show_music;
+                 : id == SID_SPLASH_HELLO ? &s->splash_hello : id == SID_SPLASH_NCL ? &s->splash_ncl
+                 : id == SID_UI_SOUNDS ? &s->ui_sounds : &s->show_music;
         *f = !*f;
         library_save(a->lib, NEMO_DATA_PATH);
         log_msg("settings: nemo %d=%d", id, *f);
         if (id == SID_SHOW_MUSIC) music_set_enabled(a, *f);
+        if (id == SID_SPLASH_NCL && *f) ui_toast(a, tr(S_ST_NCL_ARMED));
         a->setmenu.show_site = s->site;
+        break;
+    }
+    case SID_DBG_RAM: case SID_DBG_CPU: case SID_DBG_FPS: {   // debug box rows (1.2.0)
+        NemoSettings *s = &a->lib->settings;
+        int *f = id == SID_DBG_RAM ? &s->dbg_ram : id == SID_DBG_CPU ? &s->dbg_cpu : &s->dbg_fps;
+        *f = !*f;
+        library_save(a->lib, NEMO_DATA_PATH);
+        log_msg("settings: debug %d=%d", id, *f);
+        if (*f) a->debug = 1;                 // show it right away; SELECT+TRIANGLE hides it
         break;
     }
     case SID_CONFIRM: {
@@ -253,12 +271,19 @@ static void set_clock(App *a, SetId id, int index) {
     if (t == CLK_LAUNCHER && mhz > 333) ui_toast(a, tr(S_ST_OC_NEMO_NOTE));
 }
 
-// Drop-down lists (SC_PICK): overclock clocks and time zones.
+// Drop-down lists (SC_PICK): overclock clocks, time zones and log retention.
 #define PICK_ROWS 9
 
-static int pick_count(SetId id) { return id == SID_TIMEZONE ? TIME_ZONE_COUNT : 8; }
+static int pick_count(SetId id) {
+    return id == SID_TIMEZONE ? TIME_ZONE_COUNT : id == SID_LOG_KEEP ? LOG_KEEP_CHOICE_COUNT : 8;
+}
 
 static int pick_current(const App *a, SetId id) {
+    if (id == SID_LOG_KEEP) {
+        for (int i = 0; i < LOG_KEEP_CHOICE_COUNT; i++)
+            if (LOG_KEEP_CHOICES[i] == a->lib->settings.log_keep) return i;
+        return 0;
+    }
     if (id != SID_TIMEZONE) return clock_index(a, id);
     int i = zone_index(a->tz_minutes);
     return i < 0 ? 0 : i;
@@ -266,12 +291,21 @@ static int pick_current(const App *a, SetId id) {
 
 static void pick_label(SetId id, int i, char *out, size_t cap) {
     if (id == SID_TIMEZONE) zone_text(TIME_ZONES[i].minutes, out, cap);
+    else if (id == SID_LOG_KEEP && !LOG_KEEP_CHOICES[i]) snprintf(out, cap, "%s", tr(S_ST_V_OFF));
+    else if (id == SID_LOG_KEEP) snprintf(out, cap, "%d", LOG_KEEP_CHOICES[i]);
     else if (!ARK_CLOCKS[i]) snprintf(out, cap, "%s", tr(S_ST_V_AUTO));
     else snprintf(out, cap, tr(ARK_CLOCKS[i] > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), ARK_CLOCKS[i]);
 }
 
 static void pick_apply(App *a, SetId id, int i) {
     if (i == pick_current(a, id)) return;
+    if (id == SID_LOG_KEEP) {                 // the new count applies from the next start; Off stops now
+        a->lib->settings.log_keep = LOG_KEEP_CHOICES[i];
+        library_save(a->lib, NEMO_DATA_PATH);
+        log_msg("settings: log_keep=%d", LOG_KEEP_CHOICES[i]);
+        if (!LOG_KEEP_CHOICES[i]) log_disable();
+        return;
+    }
     if (id != SID_TIMEZONE) { set_clock(a, id, i); return; }
     if (set_reg(a, "time_zone_offset", TIME_ZONES[i].minutes) == 0) a->tz_minutes = TIME_ZONES[i].minutes;
 }
@@ -281,8 +315,9 @@ static void pick_scroll(App *a) {
     if (a->pick_sel >= a->pick_top + PICK_ROWS) a->pick_top = a->pick_sel - PICK_ROWS + 1;
 }
 
-extern const unsigned char testers_txt[], credits_ru[], credits_en[], nemo_logo[];
-extern const unsigned int testers_txt_size, credits_ru_size, credits_en_size, nemo_logo_size;
+extern const unsigned char testers_txt[], credits_ru[], credits_en[], nemo_logo[], changelog_ru[], changelog_en[];
+extern const unsigned int testers_txt_size, credits_ru_size, credits_en_size, nemo_logo_size, changelog_ru_size,
+    changelog_en_size;
 
 // Embedded text (bin2c, not NUL-terminated) as a text page.
 static void open_embedded(App *a, StrId title, const unsigned char *data, unsigned size) {
@@ -309,8 +344,14 @@ static void activate(App *a, SetId id) {
     case SID_DATETIME: open_date_editor(a); break;
     case SID_PLUGINS: plugins_open(a); break;
     case SID_SAVES: saves_open(a, NULL, tr(S_ST_SAVES)); break;
+    case SID_BAT_DETAILS: battery_open(a, BATS_DETAILS); break;
+    case SID_BAT_TEST: battery_open(a, BATS_TEST); break;
     case SID_CREATORS: textpage_open(a, S_ST_CREATORS, tr(S_AB_CREATORS_TEXT)); break;
     case SID_TESTERS: open_embedded(a, S_ST_TESTERS, testers_txt, testers_txt_size); break;
+    case SID_NEMO_VERSION:                    // assets/changelog_ru.txt / changelog_en.txt (1.2.0)
+        if (i18n_get() == LANG_EN) open_embedded(a, S_ST_CHANGES, changelog_en, changelog_en_size);
+        else open_embedded(a, S_ST_CHANGES, changelog_ru, changelog_ru_size);
+        break;
     case SID_THANKS:                          // docs/CREDITS.md / CREDITS.en.md by the system language
         if (i18n_get() == LANG_EN) open_embedded(a, S_ST_THANKS, credits_en, credits_en_size);
         else open_embedded(a, S_ST_THANKS, credits_ru, credits_ru_size);
@@ -545,11 +586,35 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
     case SID_NICKNAME: snprintf(out, cap, "%s", a->nickname); break;
     case SID_GITHUB: snprintf(out, cap, "feer41rus/psp_nemo_launcher"); break;
     case SID_SITE_INFO: snprintf(out, cap, "nemoleague.ru"); break;
-    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_REPLACE_XMB: {
+    case SID_DBG_RAM: case SID_DBG_CPU: case SID_DBG_FPS: {
+        const NemoSettings *s = &a->lib->settings;
+        int on = e->id == SID_DBG_RAM ? s->dbg_ram : e->id == SID_DBG_CPU ? s->dbg_cpu : s->dbg_fps;
+        snprintf(out, cap, "%s", tr(on ? S_ST_V_ON : S_ST_V_OFF));
+        break;
+    }
+    case SID_LOG_KEEP: pick_label(SID_LOG_KEEP, pick_current(a, SID_LOG_KEEP), out, cap); break;
+    case SID_BAT_CHARGE: case SID_BAT_STATE: {   // read at most once a second (1.2.2)
+        static BatInfo b;
+        static uint32_t at;
+        uint32_t now = platform_ms();
+        if (!at || now - at >= 1000) { battery_hw_read(&b, 0); at = now ? now : 1; }
+        if (e->id == SID_BAT_CHARGE) {
+            if (b.pct >= 0) snprintf(out, cap, "%d %%", b.pct);
+            else snprintf(out, cap, "—");
+        } else {
+            StrId st = !b.exists ? S_BAT_NONE : b.charging ? (b.pct >= 100 ? S_BAT_CHARGED : S_BAT_CHARGING) : S_BAT_ON_BATTERY;
+            snprintf(out, cap, "%s", tr(st));
+        }
+        break;
+    }
+    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_REPLACE_XMB:
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: {
         const NemoSettings *s = &a->lib->settings;
         int on = e->id == SID_SHOW_XMB_EXIT ? s->xmb_exit : e->id == SID_NCL_LOGO ? s->ncl_logo
-                 : e->id == SID_SITE ? s->site : e->id == SID_REPLACE_XMB ? s->replace_xmb : s->show_music;
-        snprintf(out, cap, "%s", tr(on ? S_ST_V_ON : S_ST_V_OFF));
+                 : e->id == SID_SITE ? s->site : e->id == SID_REPLACE_XMB ? s->replace_xmb
+                 : e->id == SID_SPLASH_HELLO ? s->splash_hello : e->id == SID_SPLASH_NCL ? s->splash_ncl
+                 : e->id == SID_UI_SOUNDS ? s->ui_sounds : s->show_music;
+        snprintf(out, cap, "%s", tr(!on ? S_ST_V_OFF : e->id == SID_SPLASH_NCL ? S_ST_V_NEXT_START : S_ST_V_ON));
         break;
     }
     case SID_USBCHARGE: case SID_HIGHMEM: case SID_MSCACHE: case SID_INFERNO: case SID_SKIPLOGO: case SID_NOLED:
@@ -596,7 +661,7 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
         break;
     }
     case SID_NEMO_VERSION:
-        snprintf(out, cap, "%s · %s", NEMO_VERSION, i18n_get() == LANG_EN ? NEMO_STAGE_EN : NEMO_STAGE_RU);
+        snprintf(out, cap, "%s", NEMO_VERSION);   // the stage name lives in "Changes" (1.2.0)
         break;
     case SID_MODEL: {
         char gen[8];
@@ -709,8 +774,7 @@ void ui_settings_draw(const App *app) {
     }
     if (m->depth == 0) {                          // root: a small version line (model is in "About PSP")
         char ver[96];
-        snprintf(ver, sizeof ver, "Nemo Launcher %s · %s · %s %s", NEMO_VERSION,
-                 i18n_get() == LANG_EN ? NEMO_STAGE_EN : NEMO_STAGE_RU, __DATE__, __TIME__);
+        snprintf(ver, sizeof ver, "Nemo Launcher %s · %s %s", NEMO_VERSION, __DATE__, __TIME__);
         gfx_text(FONT_TINY, 26, SCREEN_H - HINT_BAR_H - 14, 0x5b6779ff, ver);
     }
     if (app->dt_open) draw_editor(app);

@@ -1,5 +1,6 @@
 // Nemo Launcher: replacement for ARK's custom launcher (VBOOT.PBP).
 #include <pspkernel.h>
+#include <psppower.h>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #include <stdio.h>
@@ -18,6 +19,9 @@
 #include "scanner.h"
 #include "sysreg.h"
 #include "ui.h"
+#include "sfx.h"
+#include "ui_splash.h"
+#include "battery_hw.h"
 #include "version.h"
 #include "player.h"
 #include "device.h"
@@ -248,11 +252,50 @@ void power_do(App *a, int item) {
 
 // HOME held for 3 s: open (or close) the power window. Not on the USB screen: the PC holds the stick.
 static void home_hold(App *a) {
+    if (battery_running(a)) return;           // no power window during a battery test
     if (a->power.open) a->power.open = 0;
-    else if (a->net_screen != NETS_USB) powermenu_open(&a->power, a->lib->settings.xmb_exit);
+    else if (a->net_screen != NETS_USB) powermenu_open(&a->power, a->lib->settings.xmb_exit, a->now_ms);
+}
+
+static void handle_action_inner(App *a, Action act);
+
+static uint32_t fnv(uint32_t h, const void *p, size_t n) {
+    const unsigned char *b = p;
+    for (size_t i = 0; i < n; i++) h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+
+// Everything an arrow can move: if none of it changed, the cursor hit an edge (interface sounds, 1.2.3).
+static uint32_t focus_sig(const App *a) {
+    uint32_t h = 2166136261u;
+    h = fnv(h, &a->nav, sizeof a->nav);
+    h = fnv(h, &a->setmenu, sizeof a->setmenu);
+    h = fnv(h, &a->mnav, sizeof a->mnav);
+    h = fnv(h, &a->netnav, sizeof a->netnav);
+    h = fnv(h, &a->osk, sizeof a->osk);
+    h = fnv(h, &a->power, sizeof a->power);
+    h = fnv(h, &a->dt_edit, sizeof a->dt_edit);
+    int v[] = { a->pick_sel, a->reset_sel, a->gm_sel, a->net_menu_sel, a->net_confirm_sel, a->dt_field,
+                a->clock_prompt_sel, a->rx_yes };
+    return fnv(h, v, sizeof v);
 }
 
 static void handle_action(App *a, Action act) {
+    uint32_t sig = focus_sig(a);
+    // Screens that keep their cursor behind a pointer are not in the signature: no edge sound there.
+    int own = a->plug || a->page || a->saves || a->battery;
+    handle_action_inner(a, act);
+    // Only up/down know an edge; left/right also change values (settings, seeking, equalizer).
+    int moved = own || act == ACT_LEFT || act == ACT_RIGHT || focus_sig(a) != sig;
+    UiSndGate g = sfx_gate(a);
+    sfx_play(uisnd_pick(&a->snd, &g, act, moved, a->now_ms));
+}
+
+static void handle_action_inner(App *a, Action act) {
+    if (battery_running(a)) {                 // a battery test owns every button, HOME too (1.2.2)
+        battery_action(a, act);
+        return;
+    }
     if (a->listening) {                       // listening mode: every button (even HOME) only wakes
         music_action(a, act);
         return;
@@ -270,9 +313,11 @@ static void handle_action(App *a, Action act) {
     if (act == ACT_HOME) {                    // HOME leaves for Home: nothing may stay open on top
         while (a->page) textpage_action(a, ACT_BACK);
         if (a->saves) saves_action(a, ACT_BACK);
+        if (a->battery) battery_action(a, ACT_HOME);
         a->gm_open = 0;
     }
     if (a->page && act != ACT_HOME) { textpage_action(a, act); return; }
+    if (a->battery && act != ACT_HOME) { battery_action(a, act); return; }
     if (a->saves && act != ACT_HOME) { saves_action(a, act); return; }
     if (nav_top(&a->nav) == SCR_CARD && act != ACT_HOME) {   // game card: △ = game menu
         if (a->gm_open) { gamemenu_action(a, act); return; }
@@ -332,6 +377,8 @@ static void draw_hints(App *a) {
     } else if (a->page) {
         static const Hint h[] = { { ACT_BACK, S_HINT_BACK } };
         ui_hints_draw(a, h, 1);
+    } else if (a->battery) {
+        battery_draw_hints(a);
     } else if (a->saves) {
         saves_draw_hints(a);
     } else if (top == SCR_CARD && a->gm_open) {
@@ -401,6 +448,8 @@ static void draw(App *a) {
     for (int i = 0; i < a->nav.depth; i++) if (a->nav.stack[i].kind == SCR_CARD) card_below = 1;
     if (a->page) {
         textpage_draw(a);
+    } else if (a->battery) {
+        battery_draw(a);
     } else if (a->saves) {
         saves_draw(a);
     } else if (card_below) {
@@ -423,12 +472,13 @@ static void draw(App *a) {
     case SCR_OSK: ui_osk_draw(a); break;
     default: break;
     }
-    if (!network_fullscreen(a)) ui_chrome_draw(a);
+    if (!network_fullscreen(a) && !battery_running(a)) ui_chrome_draw(a);
     draw_hints(a);
     settings_draw_overlays(a);
     selfguard_draw(a);
     if (a->power.open) ui_power_draw(a);
     else ui_home_bar_draw(a);
+    ui_debugbox_draw(a);
     if (a->debug) draw_debug(a);
     if (a->screenshot) {   // capture a frame without toasts/overlays on top
         a->screenshot = 0;
@@ -503,10 +553,88 @@ static void draw_loading(App *a) {
     gfx_frame_end();
 }
 
+// Everything Nemo loads before the first menu frame. With a splash it runs on its own thread (no drawing
+// here: the main thread draws the splash meanwhile).
+static void startup_load(App *a) {
+    music_init(a, a->lib->settings.show_music);
+    network_init(a);
+    settings_init(a);
+    battery_hw_init();
+    battery_startup_check(a);   // a battery test that ran until the PSP switched off: its result
+    log_msg("scan: start");
+    gamelist_init(&a->games);
+    uint32_t scan_start = platform_ms();
+    ScanStats scan_stats = { 0, 0 };
+    scan_games_cached("ms0:", "ms0:/PSP/NEMO/scan.json", &a->games, &scan_stats);
+    rebuild_shelves(a);
+    log_msg("scan: %d games in %u ms (parsed %d, cached %d), home shelves=%d continue=%d library shelves=%d",
+            a->games.count, (unsigned)(platform_ms() - scan_start), scan_stats.parsed, scan_stats.reused,
+            a->home_count, a->continue_game, a->library_count);
+}
+
+static App *load_app;
+static volatile int load_done;
+
+static int load_thread(SceSize args, void *argp) {
+    (void)args;
+    (void)argp;
+    startup_load(load_app);
+    load_done = 1;
+    return 0;
+}
+
+// Start-up splash (1.2.3) while startup_load runs on a lower-priority thread; the vsync wait in every
+// frame gives it the CPU. Ends when both the splash screens and the loading are over.
+static void run_splash(App *a) {
+    uint32_t t0 = platform_ms(), load_ms = 0;
+    Splash s;
+    splash_init(&s, a->lib->settings.splash_hello, a->lib->settings.splash_ncl, t0);
+    a->splash_active = 1;
+    load_app = a;
+    load_done = 0;
+    SceUID th = sceKernelCreateThread("nemo_load", load_thread, 0x30, 0x40000, PSP_THREAD_ATTR_USER | PSP_THREAD_ATTR_VFPU, NULL);
+    if (th < 0 || sceKernelStartThread(th, 0, NULL) < 0) {
+        log_msg("startup: load thread failed (%08x), loading first", (unsigned)th);
+        if (th >= 0) sceKernelDeleteThread(th);
+        th = -1;
+        startup_load(a);
+        load_done = 1;
+    }
+    int last = -1, shown_ncl = 0;
+    for (;;) {
+        uint32_t now = platform_ms();
+        uint8_t lx, ly;
+        uint32_t b = pad_read(&lx, &ly);
+        SplashPhase p = splash_update(&s, now, b != 0, load_done);
+        if (load_done && !load_ms) load_ms = now - t0;
+        if ((int)p != last && p == SPL_HELLO) sfx_play(UIS_CHIME);
+        if (p == SPL_NCL) shown_ncl = 1;
+        last = (int)p;
+        if (p == SPL_DONE) break;
+        gfx_frame_begin();
+        if (p == SPL_WAIT_LOAD) splash_draw_wait();
+        else splash_draw(&s, now);
+        gfx_frame_end();
+    }
+    if (th >= 0) {
+        sceKernelWaitThreadEnd(th, NULL);
+        sceKernelDeleteThread(th);
+    }
+    splash_free();
+    a->splash_active = 0;
+    if (shown_ncl && a->lib->settings.splash_ncl) {   // the thank-you is one-shot: armed again by hand
+        a->lib->settings.splash_ncl = 0;
+        library_save(a->lib, NEMO_DATA_PATH);
+        log_msg("splash: NCL shown, turned off");
+    }
+    log_msg("startup: splash %u ms, load %u ms", (unsigned)(platform_ms() - t0), (unsigned)load_ms);
+}
+
 int main(int argc, char *argv[]) {
     SDL_SetMainReady();
     platform_init();
-    log_open();
+    log_open(library_peek_log_keep(NEMO_DATA_PATH));   // before anything logs (1.2.0)
+    platform_memory_init();                             // before any other thread starts
     log_msg("Nemo Launcher %s (%s %s) start, arkpath=%s", NEMO_VERSION, __DATE__, __TIME__, platform_arkpath());
     {
         int model = platform_model();
@@ -547,25 +675,38 @@ int main(int argc, char *argv[]) {
     log_msg("registry: button_assign=%d", cross);
 
     log_msg("ui: first frame");
-    draw_loading(&app);
-    music_init(&app, app.lib->settings.show_music);
-    network_init(&app);
-    settings_init(&app);
-    log_msg("scan: start");
-    gamelist_init(&app.games);
-    uint32_t scan_start = platform_ms();
-    ScanStats scan_stats = { 0, 0 };
-    scan_games_cached("ms0:", "ms0:/PSP/NEMO/scan.json", &app.games, &scan_stats);
-    rebuild_shelves(&app);
-    log_msg("scan: %d games in %u ms (parsed %d, cached %d), home shelves=%d continue=%d library shelves=%d",
-            app.games.count, (unsigned)(platform_ms() - scan_start), scan_stats.parsed, scan_stats.reused,
-            app.home_count, app.continue_game, app.library_count);
+    uint32_t start_ms = platform_ms();
+    if (splash_should_run(&app.lib->settings)) {
+        sfx_init();                       // audio open before the load thread starts (the chime needs it)
+        run_splash(&app);
+    } else {
+        draw_loading(&app);
+        startup_load(&app);
+        sfx_init();
+    }
+    log_msg("startup: menu after %u ms", (unsigned)(platform_ms() - start_ms));
+    int chime_freed = 0;
 
     InputRepeat repeat = { 0, 0 };
-    uint32_t prev = 0, fps_start = platform_ms();
+    uint32_t prev = 0, fps_start = platform_ms(), frame_start = 0, perf_log_at = platform_ms();
+    {   // a button still held from skipping the splash is not a press in the menu
+        uint8_t lx, ly;
+        prev = pad_read(&lx, &ly);
+    }
     int frames = 0;
+    {
+        const NemoSettings *s = &app.lib->settings;
+        app.debug = s->dbg_ram || s->dbg_cpu || s->dbg_fps;   // the debug box is on: show it from the start
+    }
+    perfstat_init(&app.perf, platform_ms());
     for (;;) {
         app.now_ms = platform_ms();
+        if (!chime_freed) chime_freed = sfx_free_chime();   // ~200 KB back once the welcome chime ended
+        if (frame_start) {   // the previous frame: work until present vs the whole frame
+            uint32_t busy = gfx_present_ms() - frame_start;
+            perfstat_frame(&app.perf, app.now_ms, busy, app.now_ms - frame_start);
+        }
+        frame_start = 0;
         uint8_t lx, ly;
         uint32_t buttons = pad_read(&lx, &ly);
         uint32_t dirs = (buttons & NB_DIRS) | input_stick_dirs(lx, ly);
@@ -581,19 +722,25 @@ int main(int argc, char *argv[]) {
         u32 hprm = 0;
         if (sceHprmPeekCurrentKey(&hprm) >= 0) music_hprm(&app, hprm);
         // SELECT is a modifier: SELECT+START = screenshot, SELECT+TRIANGLE = debug line.
-        // SELECT alone (released without a combo) on Now Playing = listening mode.
-        static int select_held, select_used;
-        if (app.listening && (pressed & NB_SELECT)) music_action(&app, ACT_NONE);   // SELECT wakes too
+        // SELECT alone (released without a combo): on Now Playing = listening mode; in listening mode = wake.
+        // SELECT+L/R in listening mode switches the track and keeps the screen off.
+        static SelectKey selk;
+        int combo = 0;
         if (buttons & NB_SELECT) {
-            if (!select_held) { select_held = 1; select_used = 0; }
-            if (note == NOTE_PREV || note == NOTE_NEXT) select_used = 1;   // no listening mode after SELECT+L/R
-            if ((buttons & NB_START) && (pressed & (NB_START | NB_SELECT))) { app.screenshot = 1; select_used = 1; }
-            if (pressed & NB_TRIANGLE) { app.debug = !app.debug; select_used = 1; }
+            if (note == NOTE_PREV || note == NOTE_NEXT) combo = 1;
+            if ((buttons & NB_START) && (pressed & (NB_START | NB_SELECT))) {
+                combo = 1;
+                if (!app.listening) app.screenshot = 1;
+            }
+            if (pressed & NB_TRIANGLE) {
+                combo = 1;
+                if (!app.listening) app.debug = !app.debug;
+            }
             pressed = 0;
-        } else if (select_held) {
-            select_held = 0;
-            if (!select_used && app.nav.tab == TAB_MUSIC && mnav_top(&app.mnav) == MS_NOW)
-                music_enter_listening(&app);
+        }
+        if (selectkey_update(&selk, buttons, combo) == SELK_TAP) {
+            if (app.listening) music_action(&app, ACT_NONE);   // wakes the screen
+            else if (app.nav.tab == TAB_MUSIC && mnav_top(&app.mnav) == MS_NOW) music_enter_listening(&app);
         }
 
         int osk_open = nav_top(&app.nav) == SCR_OSK || (app.nav.tab == TAB_MUSIC && mnav_top(&app.mnav) == MS_OSK) ||
@@ -617,6 +764,8 @@ int main(int argc, char *argv[]) {
         music_tick(&app);
         network_tick(&app);
         selfguard_tick(&app);
+        battery_tick(&app);
+        battery_learn_tick(&app);
         {   // USB / FTP screens: screen off after a minute without a press (listening mode has its own)
             static int idle_blanked;
             // USB without a cable: no countdown, the screen waits on (author's request).
@@ -629,8 +778,9 @@ int main(int argc, char *argv[]) {
         }
         {   // XMB power saving: backlight auto-off and auto sleep (not while music / FTP / USB run)
             static int ps_blanked;
-            int busy = music_playing(&app) || app.ftp.phase != FTP_OFF || usb_active();
-            int own = network_fullscreen(&app) || app.listening;
+            // A battery test keeps the screen on and never sleeps (it measures until the battery is empty).
+            int busy = music_playing(&app) || app.ftp.phase != FTP_OFF || usb_active() || battery_running(&app);
+            int own = network_fullscreen(&app) || app.listening || battery_running(&app);
             PowerSaveOut ps = powersave_update(&app.psave, app.now_ms, app.backlight_s, app.sleep_s, busy, own);
             // A screen that owns the display (USB/FTP/listening) opening while we blanked: light it first.
             if (ps.screen_off != ps_blanked) power_set_screen(!ps.screen_off);
@@ -645,6 +795,7 @@ int main(int argc, char *argv[]) {
             SDL_Delay(20);                    // screen off: no drawing, just keep input and music going
             continue;
         }
+        frame_start = app.now_ms;
         draw(&app);
         if (!app.media_suspended) art_tick(&app.games, &app.mlib);   // FTP/USB: caches stay empty
 
@@ -660,6 +811,13 @@ int main(int argc, char *argv[]) {
             app.fps = frames;
             frames = 0;
             fps_start = app.now_ms;
+            app.cpu_mhz = scePowerGetCpuClockFrequency();
+            platform_memory(&app.ram_free, &app.ram_total);
+            if (app.now_ms - perf_log_at >= 60000) {   // always in the log, whatever the debug box shows
+                perf_log_at = app.now_ms;
+                log_msg("perf: fps=%d cpu=%dMHz load=%d%% ram_free=%uKB ram_total=%uKB", app.fps, app.cpu_mhz,
+                        perfstat_load(&app.perf), (unsigned)(app.ram_free / 1024), (unsigned)(app.ram_total / 1024));
+            }
         }
     }
     return 0;

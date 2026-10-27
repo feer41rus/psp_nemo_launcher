@@ -9,6 +9,10 @@ int launch_game(const Game *g, int disc);
 int launch_exit_to_xmb(void);
 // Start ARK's own launcher (VBOOT_ARK.PBP). Returns -1 if it is missing.
 int launch_ark_menu(void);
+// Nemo hands the PSP to a game / the XMB / ARK: a marker file says the next Nemo start is a return, not a
+// power-on (the start-up splash is shown only at power-on, 1.2.3). away = 0 removes it.
+#define LAUNCH_AWAY_FILE "ms0:/PSP/NEMO/away.txt"
+void launch_mark_away(int away);
 // Restart Nemo itself (VBOOT.PBP), e.g. after Settings › Reset. Returns -1 on failure.
 int launch_self(void);
 

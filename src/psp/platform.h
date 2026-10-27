@@ -20,6 +20,7 @@ uint32_t platform_ms(void);
 
 // Main volume via the impose driver (0..30), -1 if unavailable.
 int platform_volume_get(void);
+#define IMPOSE_BRIGHTNESS 0x02   // PSP_IMPOSE_BACKLIGHT_BRIGHTNESS: levels 0..3
 // Any impose parameter (PSP_IMPOSE_* of pspimpose_driver.h), -1 if unavailable.
 int platform_impose_get(int param);
 // ARK's SETTINGS.TXT as text (missing -> ARK's flash1 copy -> ""), NULL if it exists but cannot be
@@ -46,6 +47,10 @@ int platform_model(void);
 const char *platform_fw(void);
 // Log free user memory: total and the largest block.
 void platform_log_memory(const char *tag);
+// Measure the heap once, before other threads start (it probes with sbrk).
+void platform_memory_init(void);
+// Memory left for Nemo: unused heap + kernel free; total = heap + kernel free at start (0 if unknown).
+void platform_memory(uint32_t *free_bytes, uint32_t *total_bytes);
 
 // Rewrite ARK's SETTINGS.TXT launcher line (only when it differs). 0 ok, -1 error.
 int platform_set_launcher_mode(int on);

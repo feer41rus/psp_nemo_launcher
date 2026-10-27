@@ -11,6 +11,8 @@
 #include <systemctrl_ark.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <malloc.h>
+#include <unistd.h>
 #include <string.h>
 #include "arksettings.h"
 #include <kubridge.h>
@@ -63,7 +65,8 @@ uint32_t platform_ms(void) { return (uint32_t)(sceKernelGetSystemTimeWide() / 10
 void platform_status(Status *s) {
     uint32_t now = platform_ms();
     if (!have_status || now - cached_at >= 1000) {
-        cached.battery_pct = scePowerIsBatteryExist() ? scePowerGetBatteryLifePercent() : -1;
+        cached.battery_pct = scePowerIsBatteryExist()
+            ? battery_sanitize(scePowerGetBatteryLifePercent(), have_status ? cached.battery_pct : -1) : -1;
         cached.charging = scePowerIsBatteryCharging() == 1;
         cached.wifi_on = sceWlanGetSwitchState() == 1;
         ScePspDateTime t;
@@ -203,4 +206,31 @@ int platform_ark_set(const char *key, int on, int default_on) {
     char path[160];
     snprintf(path, sizeof path, "%s%s", ark_config.arkpath, ARK_SETTINGS);
     return arksettings_update_key_file(path, "flash1:/" ARK_SETTINGS, key, on, default_on);
+}
+
+// The newlib heap is one block taken at start (PSP_HEAP_SIZE_KB(-1)); find how much of it sbrk has not
+// handed to malloc yet by probing sbrk up and giving it straight back.
+static uint32_t heap_cap, kfree_start;
+
+void platform_memory_init(void) {
+    uint32_t lo = 0, hi = 64u * 1024 * 1024;
+    while (hi - lo > 4096) {
+        uint32_t mid = lo + (hi - lo) / 2;
+        if (sbrk((intptr_t)mid) != (void *)-1) {
+            sbrk(-(intptr_t)mid);
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+    }
+    heap_cap = (uint32_t)mallinfo().arena + lo;
+    kfree_start = (uint32_t)sceKernelTotalFreeMemSize();
+}
+
+void platform_memory(uint32_t *free_bytes, uint32_t *total_bytes) {
+    struct mallinfo mi = mallinfo();
+    uint32_t used = (uint32_t)mi.uordblks;
+    uint32_t kfree = (uint32_t)sceKernelTotalFreeMemSize();
+    *free_bytes = (heap_cap > used ? heap_cap - used : 0) + kfree;
+    *total_bytes = heap_cap ? heap_cap + kfree_start : 0;
 }

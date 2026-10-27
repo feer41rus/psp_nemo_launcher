@@ -14,10 +14,10 @@ static StrId item_label(PowerItem it) {
     }
 }
 
-// Centered window over whatever is on screen (the screen below stays as it was).
+// Centered window over whatever is on screen, which fades to dark behind it (1.2.0).
 void ui_power_draw(const App *a) {
     const PowerMenu *m = &a->power;
-    gfx_rect(0, 0, SCREEN_W, SCREEN_H - HINT_BAR_H, 0x000000a0);
+    gfx_rect(0, 0, SCREEN_W, SCREEN_H, (uint32_t)powermenu_dim_alpha(m, a->now_ms));
     int h = 34 + m->count * PW_ROW_H + 8;
     int x = (SCREEN_W - PW_W) / 2, y = (SCREEN_H - HINT_BAR_H - h) / 2;
     gfx_round_rect(x, y, PW_W, h, 10, 0x1a2230f8);

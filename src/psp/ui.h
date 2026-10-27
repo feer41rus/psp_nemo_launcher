@@ -11,8 +11,12 @@
 #include "shelves.h"
 #include "mdata.h"
 #include "mnav.h"
+#include "mviews.h"
 #include "music.h"
 #include "notekey.h"
+#include "selectkey.h"
+#include "perfstat.h"
+#include "uisnd.h"
 #include "queue.h"
 #include "sleeptimer.h"
 #include "netnav.h"
@@ -40,9 +44,10 @@ typedef enum { NETS_MAIN, NETS_OSK, NETS_MENU, NETS_CONFIRM_FORGET, NETS_CONFIRM
 
 typedef enum {
     MM_TO_QUEUE, MM_TO_PLAYLIST, MM_FAVORITE, MM_QUEUE, MM_SLEEP, MM_LISTEN,
-    MM_RENAME_PLAYLIST, MM_DELETE_PLAYLIST
+    MM_RENAME_PLAYLIST, MM_DELETE_PLAYLIST, MM_EQ, MM_PLAY_FOLDER, MM_PLAY_FOLDER_ALL, MM_SHUFFLE_FOLDER_ALL, MM_EXPORT_M3U
 } MusicMenuItem;
-typedef enum { SIDE_ALBUM, SIDE_FAVORITES, SIDE_RECENT, SIDE_PLAYLIST } SideKind;
+typedef enum { SIDE_ALBUM, SIDE_FAVORITES, SIDE_RECENT, SIDE_PLAYLIST, SIDE_ARTIST, SIDE_FOLDER_UP, SIDE_FOLDER, SIDE_ALL } SideKind;
+#define MUSIC_FOLDER_KIDS 256
 #define MENU_MAX 6
 
 typedef struct {
@@ -71,8 +76,11 @@ typedef struct {
     float scroll_y[TAB_COUNT];
     float scroll_x[TAB_COUNT][NAV_MAX_SHELVES];
     uint32_t card_opened_ms;
-    int debug;
+    int debug;               // SELECT+TRIANGLE: debug line + debug box
     int fps;
+    PerfStat perf;           // debug box: frame load (1.2.0)
+    uint32_t ram_free, ram_total;
+    int cpu_mhz;
     int screenshot;        // capture the next frame
     // Music player
     MusicLib mlib;
@@ -89,11 +97,16 @@ typedef struct {
     int mmenu_count, mmenu_ctx; // ctx: 0 side entry, 1 track, 2 now playing
     int mmenu_track, mmenu_side;
     int mpick_track;            // track the playlist picker adds
+    int mconfirm;               // what MS_CONFIRM asks: 0 delete playlist, 1 reset equalizer (1.2.1)
     int music_scan_state;       // 0 idle, 1 scanning the MUSIC folder on a thread, 2 last scan found nothing
     int music_scan_seen;        // tracks seen so far by the running scan
     int listening;              // listening mode active (warning screen, then screen off)
     uint32_t listen_started_ms;
     float music_scroll[2];      // library columns
+    ArtistIndex artists;        // artists view (1.2.1)
+    FolderTree folders;         // folders view: MUSIC tree from track paths
+    int *alltracks, alltrack_count;   // all-tracks view (1.2.3): every track, by title
+    int fkids[MUSIC_FOLDER_KIDS], fkid_count;   // subfolders of mnav.folder, sorted
     // Network tab
     int has_wifi;               // model has WLAN hardware (E1000 does not)
     NetNav netnav;
@@ -130,11 +143,14 @@ typedef struct {
     struct PluginsScreen *plug; // Settings › Plugin manager (ui_plugins.c), NULL = closed
     struct TextPage *page;      // About › Creators / Testers / Thanks (textpage.c)
     struct SavesScreen *saves;  // saved data: from the game card or Settings (ui_saves.c)
+    struct BatteryScreen *battery;   // battery screens (ui_battery.c, 1.2.2)
     int gm_open, gm_sel, gm_mode, gm_pick, gm_yes, gm_with_saves;   // game card menu (gamemenu.c)
     int rx_stage, rx_yes;       // "ARK replaced Nemo, restore?" (selfguard.c)
     float net_scroll;
     int volume;            // last known main volume (0..30), -1 unknown
     uint32_t volume_until; // volume indicator visible until this time
+    UiSndState snd;        // interface sounds (1.2.3)
+    int splash_active;     // start-up splash on screen: everything else stays quiet
 } App;
 
 typedef struct {
@@ -173,6 +189,9 @@ void music_save_state(App *a);                 // before leaving Nemo / launchin
 void music_enter_listening(App *a);            // show the warning, turn the screen off after 3 s
 int  music_playing(const App *a);              // playing (not paused): ♪ icon in the top bar
 int  music_side_tracks(const App *a, int side, const int **tracks);   // tracks of a left-column entry
+// Artist overview on the right (artists view, nothing opened): row 0 "All tracks", then the albums.
+int  music_artist_rows(const App *a, int artist);
+int  music_folder_all_tracks(const App *a, int folder, const int **tracks);   // with subfolders
 int  music_side_count(const App *a);
 SideKind music_side_kind(const App *a, int side, int *index);
 const char *music_side_name(const App *a, int side);
@@ -200,6 +219,8 @@ void library_rescan(App *a);                   // games + music from disk (cache
 void ui_network_draw(App *a);
 // Power window (ui_power.c)
 void ui_power_draw(const App *a);
+// Debug box (Settings › System › Debug): RAM / CPU / FPS rows above the debug line, bottom left.
+void ui_debugbox_draw(const App *a);
 void ui_home_bar_draw(const App *a);   // HOME hold progress over the hint bar
 
 void ui_menu_draw(const App *app);
@@ -218,6 +239,16 @@ void saves_action(App *a, Action act);
 void saves_draw(const App *a);
 void saves_draw_hints(const App *a);
 int  saves_delete_code(const char *code);     // every save of a game; count deleted
+// Battery (ui_battery.c, 1.2.2): details, capacity test with its own load, results
+typedef enum { BATS_DETAILS, BATS_TEST, BATS_RUNNING, BATS_RESULTS } BatScreenKind;
+void battery_open(App *a, BatScreenKind k);
+void battery_action(App *a, Action act);      // a running test owns every button (HOME too)
+void battery_draw(const App *a);
+void battery_draw_hints(const App *a);
+void battery_tick(App *a);                     // every frame: readings, one log line a minute
+int  battery_running(const App *a);
+void battery_startup_check(App *a);            // a log left open by a self power-off: result toast
+void battery_learn_tick(App *a);               // every frame: Nemo's drain model learns on battery
 // Game card menu (gamemenu.c)
 void gamemenu_open(App *a);
 void gamemenu_action(App *a, Action act);

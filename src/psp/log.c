@@ -1,5 +1,6 @@
 #include "log.h"
 #include "platform.h"
+#include "logrot.h"
 #include <pspkernel.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -8,17 +9,25 @@
 static FILE *log_file;
 static uint32_t start_ms;
 static SceUID log_lock = -1;
+static int log_enabled;
 
-void log_open(void) {
-    mkdir("ms0:/PSP/NEMO", 0777);
-    remove(NEMO_LOG_PREV_PATH);
-    rename(NEMO_LOG_PATH, NEMO_LOG_PREV_PATH);
-    log_file = fopen(NEMO_LOG_PATH, "w");
+void log_open(int keep) {
     start_ms = platform_ms();
     log_lock = sceKernelCreateSema("nemo_log", 0, 1, 1, NULL);
+    log_enabled = keep > 0;
+    if (!log_enabled) return;
+    mkdir(NEMO_LOG_DIR, 0777);
+    logrot_rotate(NEMO_LOG_DIR, keep);
+    log_file = fopen(NEMO_LOG_PATH, "w");
+}
+
+void log_disable(void) {
+    log_pause();
+    log_enabled = 0;
 }
 
 void log_reopen(void) {
+    if (!log_enabled) return;
     if (log_lock >= 0) sceKernelWaitSema(log_lock, 1, NULL);
     if (log_file) fclose(log_file);
     log_file = fopen(NEMO_LOG_PATH, "a");

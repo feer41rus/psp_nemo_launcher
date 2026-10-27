@@ -20,6 +20,7 @@ void mdata_free(MusicData *d) {
     plist_clear(&d->favorites);
     plist_clear(&d->recent);
     plist_clear(&d->queue);
+    plist_clear(&d->m3u_imported);
     for (int i = 0; i < d->list_count; i++) plist_clear(&d->lists[i]);
     memset(d, 0, sizeof *d);
 }
@@ -176,6 +177,12 @@ char *mdata_render(const MusicData *d) {
     cJSON_AddNumberToObject(st, "position_ms", d->position_ms);
     cJSON_AddNumberToObject(st, "shuffle", d->shuffle);
     cJSON_AddNumberToObject(st, "repeat", d->repeat);
+    cJSON_AddNumberToObject(root, "view", d->view);
+    cJSON *eq = cJSON_AddObjectToObject(root, "eq");
+    cJSON_AddNumberToObject(eq, "on", d->eq_on);
+    cJSON_AddNumberToObject(eq, "preset", d->eq_preset);
+    cJSON_AddItemToObject(eq, "custom", cJSON_CreateIntArray(d->eq_custom, EQ_BANDS));
+    cJSON_AddItemToObject(root, "m3u_imported", plist_json(&d->m3u_imported));
     char *text = cJSON_Print(root);
     cJSON_Delete(root);
     return text;
@@ -216,6 +223,22 @@ int mdata_load(MusicData *d, const char *path) {
         if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(st, "shuffle"))) d->shuffle = v->valueint != 0;
         if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(st, "repeat"))) d->repeat = v->valueint;
     }
+    const cJSON *v = cJSON_GetObjectItemCaseSensitive(root, "view");
+    if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint <= 3) d->view = v->valueint;   // 3: all tracks (1.2.3)
+    const cJSON *eq = cJSON_GetObjectItemCaseSensitive(root, "eq");
+    if (cJSON_IsObject(eq)) {
+        if (cJSON_IsNumber(v = cJSON_GetObjectItemCaseSensitive(eq, "on"))) d->eq_on = v->valueint != 0;
+        v = cJSON_GetObjectItemCaseSensitive(eq, "preset");
+        if (cJSON_IsNumber(v) && v->valueint >= 0 && v->valueint < EQP_COUNT) d->eq_preset = v->valueint;
+        const cJSON *c = cJSON_GetObjectItemCaseSensitive(eq, "custom");
+        for (int i = 0; i < EQ_BANDS && cJSON_IsArray(c); i++) {
+            const cJSON *g = cJSON_GetArrayItem(c, i);
+            if (!cJSON_IsNumber(g)) continue;
+            int x = g->valueint;
+            d->eq_custom[i] = x > EQ_MAX_DB ? EQ_MAX_DB : x < -EQ_MAX_DB ? -EQ_MAX_DB : x;
+        }
+    }
+    plist_from_json(&d->m3u_imported, cJSON_GetObjectItemCaseSensitive(root, "m3u_imported"));
     cJSON_Delete(root);
     return 0;
 }
