@@ -8,11 +8,13 @@ HOST_CFLAGS := -std=c11 -D_DEFAULT_SOURCE -Wall -Wextra -Werror -g -O1 \
                -Isrc/core -Ithird_party/cjson -Ithird_party/dr_libs
 
 PSP_IMAGE  := pspdev/pspdev:latest
+# 1 = embed the Control Center plugin (1.2.4); 0 = build Nemo without it (an installed line is switched off)
+CC_PLUGIN  ?= 1
 CARD_DIR   := /media/schastlivyy/disk/PSP/SAVEDATA/ARK_01234
 # ARK-5 distribution in the project (same LANG.ARK as on the console)
 ARK_LANG   := ../FasterARK_psp_full/PSP/SAVEDATA/ARK_01234/LANG.ARK
 
-.PHONY: test fixtures psp xmblang install release clean sounds
+.PHONY: test fixtures psp xmblang install release clean sounds cc
 
 test: fixtures $(TEST_BIN)
 	./$(TEST_BIN) $(T)
@@ -25,6 +27,13 @@ $(TEST_BIN): $(CORE_SRC) $(TEST_SRC) $(wildcard src/core/*.h) tests/test.h
 	@mkdir -p build
 	cc $(HOST_CFLAGS) -o $@ $(CORE_SRC) $(TEST_SRC) -lz -lm
 
+# Control Center plugin (1.2.4): build/cc/nemo_cc.prx, embedded into VBOOT.PBP by the psp target
+cc:
+	@mkdir -p build/cc/src/cc build/cc/src/core
+	docker run --rm -u $$(id -u):$$(id -g) -v "$(CURDIR)":/src -w /src $(PSP_IMAGE) \
+		make -C build/cc -f ../../Makefile.plugin
+	@ls -l build/cc/nemo_cc.prx
+
 # Interface sounds as WAV for listening on a PC (1.2.3)
 sounds:
 	@mkdir -p build/sounds
@@ -36,7 +45,7 @@ xmblang:
 	@mkdir -p dist
 	python3 tools/make_xmb_lang.py "$(ARK_LANG)" dist
 
-psp: xmblang
+psp: xmblang $(if $(filter 0,$(CC_PLUGIN)),,cc)
 	@mkdir -p build/psp/src/core build/psp/src/psp build/psp/third_party/cjson build/psp/third_party/libpspftp/src build/psp/gen dist
 	python3 tools/bin2c.py assets/fonts/Inter-Regular.ttf build/psp/gen/font_regular.c font_regular
 	python3 tools/bin2c.py assets/fonts/Inter-SemiBold.ttf build/psp/gen/font_semibold.c font_semibold
@@ -44,6 +53,7 @@ psp: xmblang
 	python3 tools/bin2c.py assets/nemo_logo.png build/psp/gen/nemo_logo.c nemo_logo
 	python3 tools/bin2c.py assets/splash_c.png build/psp/gen/splash_c.c splash_c
 	python3 tools/bin2c.py assets/splash_ncl.png build/psp/gen/splash_ncl.c splash_ncl
+	$(if $(filter 0,$(CC_PLUGIN)),,python3 tools/bin2c.py build/cc/nemo_cc.prx build/psp/gen/nemo_cc.c nemo_cc)
 	python3 tools/bin2c.py assets/testers.txt build/psp/gen/testers_txt.c testers_txt
 	python3 tools/bin2c.py assets/changelog_ru.txt build/psp/gen/changelog_ru.c changelog_ru
 	python3 tools/bin2c.py assets/changelog_en.txt build/psp/gen/changelog_en.c changelog_en
@@ -52,7 +62,7 @@ psp: xmblang
 	python3 tools/bin2c.py build/psp/gen/credits_ru.txt build/psp/gen/credits_ru.c credits_ru
 	python3 tools/bin2c.py build/psp/gen/credits_en.txt build/psp/gen/credits_en.c credits_en
 	docker run --rm -u $$(id -u):$$(id -g) -v "$(CURDIR)":/src -w /src $(PSP_IMAGE) \
-		make -C build/psp -f ../../Makefile.psp
+		make -C build/psp -f ../../Makefile.psp CC_PLUGIN=$(CC_PLUGIN)
 	python3 tools/check_stubs.py build/psp/nemo.elf
 	cp build/psp/EBOOT.PBP dist/VBOOT.PBP
 	@ls -l dist/VBOOT.PBP
@@ -82,6 +92,7 @@ release: psp   # run "make test" locally first (tests are not published)
 	rm -rf $(REL) && mkdir -p $(REL)/lite/$(ARK_DIR) $(REL)/full dist/release
 	cp dist/VBOOT.PBP dist/lang_ru.json dist/lang_en.json $(REL)/lite/$(ARK_DIR)/
 	cp README.md README.ru.md LICENSE $(REL)/lite/
+	cp -r guides $(REL)/lite/
 	cd $(REL)/lite && zip -qr "$(CURDIR)/dist/release/$(REL_NAME)_lite_no_ark-5.zip" .
 	unzip -q "$(ARK_FULL)" "PSP/*" -d $(REL)/full
 	mv $(REL)/full/$(ARK_DIR)/VBOOT.PBP $(REL)/full/$(ARK_DIR)/VBOOT_ARK.PBP

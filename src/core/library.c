@@ -14,7 +14,7 @@
 void library_settings_defaults(NemoSettings *s) {
     s->xmb_exit = 0;
     s->ncl_logo = 1;
-    s->splash_hello = s->ui_sounds = 1;
+    s->splash_hello = s->ui_sounds = s->control_center = 1;
     s->splash_ncl = 0;   // the seller arms it for the buyer's first start; it turns itself off once shown
     s->site = 1;
     s->show_music = 1;
@@ -168,6 +168,7 @@ int library_load(Library *l, const char *path) {
         read_flag(st, "splash_hello", &l->settings.splash_hello);
         read_flag(st, "splash_ncl", &l->settings.splash_ncl);
         read_flag(st, "ui_sounds", &l->settings.ui_sounds);
+        read_flag(st, "control_center", &l->settings.control_center);
         read_flag(st, "site", &l->settings.site);
         read_flag(st, "show_music", &l->settings.show_music);
         read_flag(st, "replace_xmb", &l->settings.replace_xmb);
@@ -228,6 +229,7 @@ int library_save(const Library *l, const char *path) {
     cJSON_AddBoolToObject(st, "splash_hello", l->settings.splash_hello);
     cJSON_AddBoolToObject(st, "splash_ncl", l->settings.splash_ncl);
     cJSON_AddBoolToObject(st, "ui_sounds", l->settings.ui_sounds);
+    cJSON_AddBoolToObject(st, "control_center", l->settings.control_center);
     cJSON_AddBoolToObject(st, "site", l->settings.site);
     cJSON_AddBoolToObject(st, "show_music", l->settings.show_music);
     cJSON_AddBoolToObject(st, "replace_xmb", l->settings.replace_xmb);

@@ -226,8 +226,8 @@ HwTrack *hwmp3_open(const char *path, uint32_t start_ms) {
         if (at > stream_start) stream_start = at;
         t->start_ms = start_ms;
         if (gapless && total != NO_LIMIT) {
-            uint64_t at = (uint64_t)start_ms * (unsigned)m->sample_rate / 1000, valid = total - m->enc_delay - m->enc_padding;
-            t->left = at < valid ? valid - at : 0;
+            uint64_t played = (uint64_t)start_ms * (unsigned)m->sample_rate / 1000, valid = total - m->enc_delay - m->enc_padding;
+            t->left = played < valid ? valid - played : 0;
         }
     } else if (gapless) {
         t->skip = (uint64_t)m->enc_delay + DECODER_DELAY;

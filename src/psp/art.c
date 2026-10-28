@@ -54,6 +54,18 @@ static SDL_Thread *worker;
 static uint32_t generation;   // bumped by art_reset so stale results are dropped
 
 static uint8_t *load_png(const Game *g, int background, size_t *size) {
+    if (g->format == GF_UMD) {   // straight from the disc
+        FILE *f = fopen(background ? "disc0:/PSP_GAME/PIC1.PNG" : "disc0:/PSP_GAME/ICON0.PNG", "rb");
+        if (!f) return NULL;
+        fseek(f, 0, SEEK_END);
+        long n = ftell(f);
+        fseek(f, 0, SEEK_SET);
+        uint8_t *data = n > 0 && n < 4 * 1024 * 1024 ? malloc((size_t)n) : NULL;
+        if (data && fread(data, 1, (size_t)n, f) != (size_t)n) { free(data); data = NULL; }
+        fclose(f);
+        *size = data ? (size_t)n : 0;
+        return data;
+    }
     if (g->format == GF_ISO) {
         BlockDev *d = blockdev_open(g->path);
         if (!d) return NULL;
@@ -238,7 +250,9 @@ static int worker_main(void *unused) {
                 cache_write(path, s);
             }
         } else {
-            cache_path(job.game.path, job.kind == KIND_PIC1 ? 'b' : 'i', path, sizeof path);
+            // every UMD has the same path: key its cache by the disc ID instead
+            cache_path(job.game.format == GF_UMD ? job.game.id : job.game.path, job.kind == KIND_PIC1 ? 'b' : 'i', path,
+                       sizeof path);
             job.from_cache = cache_read(path, &s);
             if (!job.from_cache) {
                 s = decode(&job.game, job.kind == KIND_PIC1);

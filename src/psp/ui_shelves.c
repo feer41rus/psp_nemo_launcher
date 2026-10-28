@@ -27,6 +27,7 @@ uint32_t ui_game_color(const Game *g, int bottom) {
 }
 
 const char *ui_kind_label(const Game *g) {
+    if (g->format == GF_UMD) return tr(S_UMD_BADGE);
     switch (g->kind) {
     case GK_PSP: return tr(S_KIND_PSP);
     case GK_PS1: return tr(S_KIND_PS1);

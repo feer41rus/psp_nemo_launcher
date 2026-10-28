@@ -170,16 +170,20 @@ static void change(App *a, SetId id, int delta) {
         break;
     }
     case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC:
-    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: {
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: {
         NemoSettings *s = &a->lib->settings;
         int *f = id == SID_SHOW_XMB_EXIT ? &s->xmb_exit : id == SID_NCL_LOGO ? &s->ncl_logo : id == SID_SITE ? &s->site
                  : id == SID_SPLASH_HELLO ? &s->splash_hello : id == SID_SPLASH_NCL ? &s->splash_ncl
-                 : id == SID_UI_SOUNDS ? &s->ui_sounds : &s->show_music;
+                 : id == SID_UI_SOUNDS ? &s->ui_sounds : id == SID_CONTROL_CENTER ? &s->control_center : &s->show_music;
         *f = !*f;
         library_save(a->lib, NEMO_DATA_PATH);
         log_msg("settings: nemo %d=%d", id, *f);
         if (id == SID_SHOW_MUSIC) music_set_enabled(a, *f);
         if (id == SID_SPLASH_NCL && *f) ui_toast(a, tr(S_ST_NCL_ARMED));
+        if (id == SID_CONTROL_CENTER) {
+            cc_deploy(a);
+            ui_toast(a, tr(S_ST_CC_NOTE));
+        }
         a->setmenu.show_site = s->site;
         break;
     }
@@ -393,7 +397,7 @@ static void remove_dir_files(const char *dir) {
     if (d < 0) return;
     SceIoDirent e;
     memset(&e, 0, sizeof e);
-    char path[256];
+    char path[512];
     while (sceIoDread(d, &e) > 0) {
         if (e.d_name[0] == '.') continue;
         snprintf(path, sizeof path, "%s/%s", dir, e.d_name);
@@ -608,12 +612,12 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
         break;
     }
     case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_REPLACE_XMB:
-    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: {
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: {
         const NemoSettings *s = &a->lib->settings;
         int on = e->id == SID_SHOW_XMB_EXIT ? s->xmb_exit : e->id == SID_NCL_LOGO ? s->ncl_logo
                  : e->id == SID_SITE ? s->site : e->id == SID_REPLACE_XMB ? s->replace_xmb
                  : e->id == SID_SPLASH_HELLO ? s->splash_hello : e->id == SID_SPLASH_NCL ? s->splash_ncl
-                 : e->id == SID_UI_SOUNDS ? s->ui_sounds : s->show_music;
+                 : e->id == SID_UI_SOUNDS ? s->ui_sounds : e->id == SID_CONTROL_CENTER ? s->control_center : s->show_music;
         snprintf(out, cap, "%s", tr(!on ? S_ST_V_OFF : e->id == SID_SPLASH_NCL ? S_ST_V_NEXT_START : S_ST_V_ON));
         break;
     }
@@ -780,7 +784,7 @@ void ui_settings_draw(const App *app) {
     if (app->dt_open) draw_editor(app);
     if (app->nick_open) ui_osk_draw(app);
     if (app->pick_open) {                         // drop-down next to the selected row
-        int n = pick_count(app->pick_id), rows = n < PICK_ROWS ? n : PICK_ROWS;
+        int pn = pick_count(app->pick_id), rows = pn < PICK_ROWS ? pn : PICK_ROWS;
         int w = app->pick_id == SID_TIMEZONE ? 300 : 190, rh = 22, h = rows * rh + 12;
         int x = SCREEN_W - w - 30, py = CONTENT_Y + (CONTENT_H - h) / 2;
         gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x00000070);
@@ -794,10 +798,10 @@ void ui_settings_draw(const App *app) {
             pick_label(app->pick_id, i, s, sizeof s);
             gfx_text_fit(FONT_BODY, x + 16, ry + 2, w - 32, i == cur ? COL_ACCENT : COL_TEXT, s);
         }
-        if (n > rows) {                           // scroll bar
-            int bh = h - 12, th = bh * rows / n, ty = py + 6 + (bh - th) * app->pick_top / (n - rows);
+        if (pn > rows) {                          // scroll bar
+            int bh = h - 12, kh = bh * rows / pn, ky = py + 6 + (bh - kh) * app->pick_top / (pn - rows);
             gfx_round_rect(x + w - 7, py + 6, 3, bh, 1, 0x2a3446ff);
-            gfx_round_rect(x + w - 7, ty, 3, th, 1, COL_ACCENT);
+            gfx_round_rect(x + w - 7, ky, 3, kh, 1, COL_ACCENT);
         }
     }
 }

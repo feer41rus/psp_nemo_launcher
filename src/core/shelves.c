@@ -45,9 +45,12 @@ int shelves_home(const GameList *gl, const Library *lib, Shelf *out, int max, in
     Shelf recent;
     memset(&recent, 0, sizeof recent);
     recent.kind = SHELF_RECENT;
+    // A disc in the drive is the main game; the former main one leads the recent row (author, 1.2.5).
+    for (int g = 0; g < gl->count && *continue_game < 0; g++)
+        if (gl->items[g].format == GF_UMD) *continue_game = g;
     for (int i = 0; i < lib->recent_count; i++) {
         int g = gamelist_find(gl, lib->recent[i]);
-        if (g < 0 || gl->items[g].kind == GK_UTILITY) continue;
+        if (g < 0 || gl->items[g].kind == GK_UTILITY || gl->items[g].format == GF_UMD) continue;
         if (*continue_game < 0) *continue_game = g;
         else shelf_push(&recent, g);
     }

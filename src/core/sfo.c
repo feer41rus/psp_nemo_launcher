@@ -53,3 +53,24 @@ int sfo_get_u32(const uint8_t *sfo, size_t size, const char *key, uint32_t *out)
     *out = rd32(v);
     return 0;
 }
+
+int sfo_set_string(uint8_t *sfo, size_t size, const char *key, const char *value) {
+    if (!sfo || size < 20 || memcmp(sfo, "\0PSF", 4) != 0) return -1;
+    uint32_t key_start = rd32(sfo + 8), data_start = rd32(sfo + 12), count = rd32(sfo + 16);
+    if (key_start > size || data_start > size || count > 1024 || 20 + (size_t)count * 16 > size) return -1;
+    size_t key_len = strlen(key), vlen = strlen(value) + 1;
+    for (uint32_t i = 0; i < count; i++) {
+        uint8_t *e = sfo + 20 + i * 16;
+        size_t ko = key_start + rd16(e);
+        if (ko + key_len + 1 > size || memcmp(sfo + ko, key, key_len + 1) != 0) continue;
+        uint16_t fmt = rd16(e + 2);
+        uint32_t max = rd32(e + 8);
+        size_t doff = data_start + (size_t)rd32(e + 12);
+        if ((fmt != SFO_FMT_UTF8 && fmt != SFO_FMT_UTF8S) || vlen > max || doff > size || max > size - doff) return -1;
+        memset(sfo + doff, 0, max);
+        memcpy(sfo + doff, value, vlen);
+        for (int b = 0; b < 4; b++) e[4 + b] = (uint8_t)(vlen >> (8 * b));   // the entry's used length
+        return 0;
+    }
+    return -1;
+}

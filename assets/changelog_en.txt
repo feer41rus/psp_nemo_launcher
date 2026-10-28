@@ -1,3 +1,16 @@
+# 1.2.5 — DLC and UMD
+- "Add-ons (DLC)" in the game card's Triangle menu — "Install DLC": DLC from the "PSP/NEMO/install_dlc" folder goes into the game's folder by itself. DLC for another version of the game can be adapted (Nemo asks). Encrypted DLC without a licence is not installed — Nemo warns. The card shows "DLC: installed".
+- "Add-ons (DLC) › Installed DLC": the DLC with names and sizes, mark some and delete them — the game's and other DLC's files stay.
+- Game card: format and size ("ISO · 865 MB", "PSN", "CSO", "EBOOT"); "Delete game" asks "for good".
+- UMD discs: insert a disc — a "UMD inserted" note, START plays it right away; the disc becomes the main game on Home and shows in the Library marked "UMD".
+- UMD Video and UMD Music are not supported yet (a note when inserted).
+
+# 1.2.4 — Control Center
+- Control Center: in PSP games and homebrew, HOME opens Nemo's window instead of the Sony one — Resume, Screenshot, Volume, Brightness, Quit game (with a question); the clock and charge on top. The game stands still and silent while it is open.
+- Game screenshots go to PICTURE/Nemo (shown in XMB › Photo).
+- Nemo installs and enables the plugin itself; the switch is Settings › System › Nemo › Control Center.
+- Plugin manager: what the selected plugin does, under the list.
+
 # 1.2.3 — Splash screens and sounds
 - Splash screen at power-on: "Welcome! Your PSP. The way it should be." with a chime. Only at power-on, not after a game; any button skips; Nemo loads while it plays.
 - A thank-you "Thank you for buying your console from NCL" for sold consoles: "NCL screen › On next start" shows it once at the next power-on, then it turns itself off.

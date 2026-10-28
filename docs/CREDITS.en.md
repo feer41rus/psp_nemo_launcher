@@ -22,11 +22,24 @@ Thanks to the projects Nemo Launcher is built on or learned from.
 ## Music
 - **MP3PlayerPlugin** by plum_429 — https://github.com/PSP-Archive/MP3PlayerPlugin (GPL-3.0) — background music in the XMB and games; the base of the planned in-game music plugin (1.2).
 - **vshbgm** by Koutsie — https://github.com/PSP-Archive/vshbgm (GPL-2.0) — background music in the VSH with `sceAudiocodec`.
-- **BatterySteve** by koutsie — https://github.com/koutsie/BatterySteve (no licence stated) — the idea of testing the real battery capacity by draining it under load (no code copied).
 - **pspmp3 / sceMp3** (PSPSDK, BSD) — https://github.com/pspdev/pspsdk — the hardware MP3 decoder (Media Engine).
 - **dr_flac** by David Reid — https://github.com/mackron/dr_libs (public domain or MIT-0) — FLAC decoder (v0.12.42, copied from SDL_mixer 2.8.1); SDL_mixer in pspdev is built without FLAC.
 - **The Mp3 Info Tag (LAME tag)** by Gabriel Bouvigne — http://gabriel.mp3-tech.org/mp3infotag.html — the Xing/Info and LAME tag format: frame count, seek TOC, encoder delay and padding for gapless playback.
 - **VBRI header** (Fraunhofer) — reference for parsing (no code copied).
+
+## Battery
+- **BatterySteve** by koutsie — https://github.com/koutsie/BatterySteve (no licence stated) — the idea of testing the real battery capacity by draining it under load (no code copied).
+
+## DLC and UMD
+- **ARK-5 / PRO CFW: NoDRM (Stargate)** — https://github.com/PSP-Arkfive/ARK-5 (GPL-3.0) — `Stargate/src/nodrm_patch.c` serves decrypted DLC (`.edat`) to games with no plugins; Nemo only puts the files in place (reference, no code copied).
+- **Launcher-Menus / arkMenu** (GPL-3.0) — `umd.cpp`: how to start a game from a UMD, with a `PBOOT.PBP` update (reference, no code copied).
+- **RetroAchievements: Working with DLC for the PlayStation Portable** — https://docs.retroachievements.org/Working-with-DLC-for-the-PlayStation-Portable — where games look for DLC and why the ID must match the game's version.
+- **NPloader and NPdecrypter** (GameBrew) — https://www.gamebrew.org/wiki/NPloader_DLC_loader_PSP, https://gamebrew.org/wiki/NPdecrypter_PSP — how decrypted DLC used to be loaded with a plugin (reference; not needed with ARK-5).
+
+## Control Center (HOME window in games)
+- **CustomHOME** by ABCanG — https://www.gamebrew.org/wiki/CustomHOME_PSP (no licence stated) — the idea of an own HOME menu in games (no code copied).
+- **Custom Home Mod** by suloku — https://gamebrew.org/wiki/Custom_Home_Mod_PSP (no licence stated) — the feature set of such a menu (no code copied).
+- **PSP-HUD** by ErikPshat — https://github.com/ErikPshat/PSP-HUD (no licence stated) — the idea of drawing over game frames by hooking the frame output (no code copied).
 
 ## Tools and libraries
 - **pspdev / PSPSDK** — https://github.com/pspdev/pspdev (BSD) and the `pspdev/pspdev` Docker image — the PSP toolchain.

@@ -1,0 +1,25 @@
+# Control Center plugin (1.2.4): a kernel PRX that ARK loads in PSP games and homebrew.
+# Runs inside the pspdev/pspdev Docker image from build/cc:  make -C build/cc -f ../../Makefile.plugin
+
+ROOT := ../..
+VPATH := $(ROOT)
+
+TARGET = nemo_cc
+OBJS = src/cc/main.o src/cc/cclog.o src/cc/game_psp.o src/cc/ccui.o \
+       src/core/ccpix.o src/core/ccdraw.o src/core/ccfont_data.o src/core/ccmenu.o src/core/ccbmp.o
+
+INCDIR = $(ROOT)/src/core $(ROOT)/src/cc
+CFLAGS = -Os -G0 -Wall -std=gnu11 -fno-pic -MMD -MP
+ASFLAGS = $(CFLAGS)
+
+BUILD_PRX = 1
+PRX_EXPORTS = $(ROOT)/src/cc/exports.exp
+PSP_FW_VERSION = 660
+USE_KERNEL_LIBC = 1
+USE_KERNEL_LIBS = 1
+LIBS = -lpspsystemctrl_kernel -larkctrl -lpsppower_driver -lpsprtc_driver
+
+PSPSDK = $(shell psp-config --pspsdk-path)
+include $(PSPSDK)/lib/build_prx.mak
+
+-include $(OBJS:.o=.d)

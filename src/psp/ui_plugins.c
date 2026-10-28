@@ -3,6 +3,7 @@
 #include "log.h"
 #include "platform.h"
 #include "plugins.h"
+#include "plugdesc.h"
 #include "safefile.h"
 #include <pspiofilemgr.h>
 #include <stdio.h>
@@ -80,7 +81,7 @@ static void scan_dir(PluginsScreen *s, int place, const char *dir, int depth) {
     SceIoDirent e;
     memset(&e, 0, sizeof e);
     while (sceIoDread(d, &e) > 0 && s->found_count < FOUND_MAX) {
-        char path[160];
+        char path[320];   // dir (up to 160) + a 255-char name would not fit 160
         if (e.d_name[0] == '.') { memset(&e, 0, sizeof e); continue; }
         snprintf(path, sizeof path, "%s/%s", dir, e.d_name);
         if (FIO_S_ISDIR(e.d_stat.st_mode)) {
@@ -89,8 +90,11 @@ static void scan_dir(PluginsScreen *s, int place, const char *dir, int depth) {
             size_t n = strlen(e.d_name);
             if (n > 4 && strcasecmp(e.d_name + n - 4, ".prx") == 0 && !plugins_blacklisted(e.d_name) &&
                 !plugins_has(&s->files[place], e.d_name)) {
-                snprintf(s->found[s->found_count], sizeof s->found[0], "%s", path);
-                s->found_place[s->found_count++] = place;
+                size_t len = strlen(path);
+                if (len < sizeof s->found[0]) {   // a longer path would not fit PLUGINS.TXT either: skip it
+                    memcpy(s->found[s->found_count], path, len + 1);
+                    s->found_place[s->found_count++] = place;
+                }
             }
         }
         memset(&e, 0, sizeof e);
@@ -240,6 +244,9 @@ void plugins_draw(const App *a) {
         int rw = gfx_text_width(FONT_SMALL, right);
         gfx_text_fit(FONT_BODY, x + 14, y + 4, w - rw - 40, plugins_level_index(l) == 0 ? COL_MUTED : COL_TEXT, name);
         gfx_text(FONT_SMALL, x + w - 12 - rw, y + 6, sel ? COL_ACCENT : COL_MUTED, right);
+        if (sel)   // what the selected plugin does, under the list (1.2.4)
+            gfx_text_fit(FONT_SMALL, 30, CONTENT_Y + 28 + VISIBLE * ROW_H + 2, SCREEN_W - 60, COL_MUTED,
+                         plugdesc_get(name, i18n_get() == LANG_EN));
     }
     if (s->rows > VISIBLE) {
         int track = VISIBLE * ROW_H - 4, th = track * VISIBLE / s->rows;

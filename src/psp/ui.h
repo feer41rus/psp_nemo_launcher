@@ -144,13 +144,17 @@ typedef struct {
     struct TextPage *page;      // About › Creators / Testers / Thanks (textpage.c)
     struct SavesScreen *saves;  // saved data: from the game card or Settings (ui_saves.c)
     struct BatteryScreen *battery;   // battery screens (ui_battery.c, 1.2.2)
-    int gm_open, gm_sel, gm_mode, gm_pick, gm_yes, gm_with_saves;   // game card menu (gamemenu.c)
+    int gm_open, gm_sel, gm_mode, gm_pick, gm_yes, gm_with_saves, gm_list;   // game card menu (gamemenu.c)
     int rx_stage, rx_yes;       // "ARK replaced Nemo, restore?" (selfguard.c)
     float net_scroll;
     int volume;            // last known main volume (0..30), -1 unknown
     uint32_t volume_until; // volume indicator visible until this time
     UiSndState snd;        // interface sounds (1.2.3)
     int splash_active;     // start-up splash on screen: everything else stays quiet
+    int card_dlc;          // the open card's game has DLC installed (1.2.5)
+    long long card_bytes;  // its size on the card, -1 unknown (UMD)
+    uint32_t umd_notice_until;   // "UMD inserted" notice on screen until (START plays the disc)
+    char umd_notice[160];
 } App;
 
 typedef struct {
@@ -248,6 +252,7 @@ void battery_draw_hints(const App *a);
 void battery_tick(App *a);                     // every frame: readings, one log line a minute
 int  battery_running(const App *a);
 void battery_startup_check(App *a);            // a log left open by a self power-off: result toast
+void cc_deploy(App *a);                        // Control Center plugin file + PLUGINS.TXT line (ccdeploy.c, 1.2.4)
 void battery_learn_tick(App *a);               // every frame: Nemo's drain model learns on battery
 // Game card menu (gamemenu.c)
 void gamemenu_open(App *a);

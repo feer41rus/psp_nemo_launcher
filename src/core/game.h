@@ -2,7 +2,8 @@
 #define NEMO_GAME_H
 
 typedef enum { GK_PSP, GK_PS1, GK_HOMEBREW, GK_UTILITY } GameKind;
-typedef enum { GF_ISO, GF_PBP_PSN, GF_PBP_PS1, GF_PBP_HOMEBREW } GameFormat;  // decides launch path
+// GF_UMD (1.2.5): the disc in the drive, id "umd:<DISC_ID>", added and removed while Nemo runs.
+typedef enum { GF_ISO, GF_PBP_PSN, GF_PBP_PS1, GF_PBP_HOMEBREW, GF_UMD } GameFormat;  // decides launch path
 
 #define GAME_MAX_DISCS 8
 

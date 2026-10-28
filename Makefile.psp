@@ -16,13 +16,19 @@ SDL_PKGS = sdl2 SDL2_ttf SDL2_image SDL2_gfx SDL2_mixer
 INCDIR = $(ROOT)/src/core $(ROOT)/src/psp $(ROOT)/third_party/cjson $(ROOT)/third_party/dr_libs $(ROOT)/third_party/libpspftp/include
 CFLAGS = -O2 -G0 -Wall -Wno-unused-parameter -std=gnu11 -MMD -MP $(shell psp-pkg-config --cflags $(SDL_PKGS))
 LIBS = $(filter-out -lSDL2main -pthread,$(shell psp-pkg-config --libs $(SDL_PKGS))) \
-       -lpspsystemctrl_user -lpspkubridge -larkctrl -lpsphprm -lpspreg -lpsprtc -lpspwlan -lpsppower -lpspmp3
+       -lpspsystemctrl_user -lpspkubridge -larkctrl -lpsphprm -lpspreg -lpsprtc -lpspwlan -lpsppower -lpspmp3 -lpspumd
 
 BUILD_PRX = 1
 PSP_FW_VERSION = 660
 PSP_LARGE_MEMORY = 1
 EXTRA_TARGETS = EBOOT.PBP
 PSP_EBOOT_TITLE = Nemo Launcher
+
+ifeq ($(CC_PLUGIN),0)
+CFLAGS += -DNEMO_NO_CC
+else
+OBJS += gen/nemo_cc.o
+endif
 
 PSPSDK = $(shell psp-config --pspsdk-path)
 include $(PSPSDK)/lib/build.mak

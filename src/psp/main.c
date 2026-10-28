@@ -20,6 +20,9 @@
 #include "sysreg.h"
 #include "ui.h"
 #include "sfx.h"
+#include "dlcinst.h"
+#include "gamesize.h"
+#include "umd.h"
 #include "ui_splash.h"
 #include "battery_hw.h"
 #include "version.h"
@@ -65,6 +68,78 @@ void media_resume(App *a) {
     platform_log_memory("media-resumed");
 }
 
+// ---------- the UMD drive (1.2.5) ----------
+
+static int umd_index(const App *a) {
+    for (int i = a->games.count - 1; i >= 0; i--)
+        if (a->games.items[i].format == GF_UMD) return i;
+    return -1;
+}
+
+static void umd_add(App *a, const UmdEvent *e) {
+    if (umd_index(a) >= 0) return;
+    Game *g = gamelist_push(&a->games);   // last in the list: removing it leaves the other indices alone
+    if (!g) return;
+    snprintf(g->id, sizeof g->id, "umd:%s", e->disc_id[0] ? e->disc_id : "DISC");
+    snprintf(g->title, sizeof g->title, "%s", e->title);
+    snprintf(g->disc_id, sizeof g->disc_id, "%s", e->disc_id);
+    snprintf(g->path, sizeof g->path, "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN");
+    g->kind = GK_PSP;
+    g->format = GF_UMD;
+}
+
+static void umd_remove(App *a) {
+    int i = umd_index(a);
+    if (i < 0) return;
+    if (a->nav.card_game == i && nav_top(&a->nav) == SCR_CARD) {   // its card or menu is open: close them
+        a->gm_open = 0;
+        nav_pop(&a->nav);
+    }
+    if (a->nav.card_game == i) a->nav.card_game = -1;
+    memmove(&a->games.items[i], &a->games.items[i + 1], sizeof a->games.items[0] * (size_t)(a->games.count - i - 1));
+    a->games.count--;
+    a->umd_notice_until = 0;
+    art_reset();
+}
+
+static void umd_event(App *a, const UmdEvent *e) {
+    switch (e->kind) {
+    case UMD_EV_GAME:
+        umd_add(a, e);
+        rebuild_shelves(a);
+        if (!e->at_start) {   // a disc in at power-on just sits on the shelves
+            snprintf(a->umd_notice, sizeof a->umd_notice, tr(S_UMD_IN_FMT), e->title);
+            a->umd_notice_until = a->now_ms + 5000;
+        }
+        break;
+    case UMD_EV_VIDEO: ui_toast(a, tr(S_UMD_VIDEO)); break;
+    case UMD_EV_MUSIC: ui_toast(a, tr(S_UMD_MUSIC)); break;
+    case UMD_EV_REMOVED:
+        if (umd_index(a) >= 0) {
+            umd_remove(a);
+            rebuild_shelves(a);
+            ui_toast(a, tr(S_UMD_OUT));
+        }
+        break;
+    default: break;
+    }
+}
+
+// A text field is open: START there means "done", not "play the disc".
+static int typing(const App *a) {
+    return nav_top(&a->nav) == SCR_OSK || mnav_top(&a->mnav) == MS_OSK || a->nick_open || a->dt_open ||
+           a->net_screen == NETS_OSK;
+}
+
+static void draw_umd_notice(const App *a) {
+    const char *hint = tr(S_UMD_START);
+    int hw = gfx_text_width(FONT_SMALL, hint), w = 360, h = 30, x = (SCREEN_W - w) / 2, y = TOP_BAR_H + 6;
+    gfx_round_rect(x, y, w, h, 12, 0x1a2230d8);
+    gfx_round_rect(x + 10, y + 11, 4, 9, 2, COL_ACCENT);
+    gfx_text_fit(FONT_BODY, x + 22, y + 6, w - hw - 44, COL_TEXT, a->umd_notice);
+    gfx_text(FONT_SMALL, x + w - hw - 12, y + 9, COL_ACCENT, hint);
+}
+
 void library_rescan(App *a) {
     uint32_t t0 = platform_ms();
     int games_before = a->games.count, tracks_before = a->mlib.track_count;
@@ -72,6 +147,8 @@ void library_rescan(App *a) {
     gamelist_init(&a->games);
     ScanStats gs = { 0, 0 };
     scan_games_cached("ms0:", "ms0:/PSP/NEMO/scan.json", &a->games, &gs);
+    UmdEvent disc;
+    if (umd_current(&disc)) umd_add(a, &disc);   // the disc stays on the shelves after a rescan
     rebuild_shelves(a);
     music_reload(a);
     art_reset();
@@ -112,7 +189,11 @@ static void open_card_for(App *a, int game) {
     int last = library_last_disc(a->lib, g->id);
     a->nav.card_disc = (g->disc_count > 1 && last >= 1 && last <= g->disc_count) ? last : 1;
     a->card_opened_ms = a->now_ms;
-    log_msg("card: game=%d \"%s\"", game, g->title);
+    char dir[64];
+    snprintf(dir, sizeof dir, "ms0:/PSP/GAME/%s", g->disc_id);
+    a->card_dlc = g->disc_id[0] && dlc_installed(dir);
+    a->card_bytes = game_size(g);
+    log_msg("card: game=%d \"%s\" dlc=%d", game, g->title, a->card_dlc);
 }
 
 static void open_card(App *a) { open_card_for(a, ui_focused_game(a, a->nav.tab)); }
@@ -281,6 +362,13 @@ static uint32_t focus_sig(const App *a) {
 }
 
 static void handle_action(App *a, Action act) {
+    if (act == ACT_START && a->now_ms < a->umd_notice_until && !typing(a) && umd_index(a) >= 0) {
+        a->umd_notice_until = 0;   // START on the "UMD inserted" notice plays the disc (author)
+        a->nav.card_game = umd_index(a);
+        a->nav.card_disc = 0;
+        start_game(a);
+        return;
+    }
     uint32_t sig = focus_sig(a);
     // Screens that keep their cursor behind a pointer are not in the signature: no edge sound there.
     int own = a->plug || a->page || a->saves || a->battery;
@@ -486,6 +574,7 @@ static void draw(App *a) {
         take_screenshot(a);
         return;
     }
+    if (a->now_ms < a->umd_notice_until) draw_umd_notice(a);
     ui_toast_draw(a);
     ui_volume_draw(a);
     gfx_frame_end();
@@ -559,6 +648,7 @@ static void startup_load(App *a) {
     music_init(a, a->lib->settings.show_music);
     network_init(a);
     settings_init(a);
+    cc_deploy(a);
     battery_hw_init();
     battery_startup_check(a);   // a battery test that ran until the PSP switched off: its result
     log_msg("scan: start");
@@ -685,6 +775,8 @@ int main(int argc, char *argv[]) {
         sfx_init();
     }
     log_msg("startup: menu after %u ms", (unsigned)(platform_ms() - start_ms));
+    if (app.toast[0]) app.toast_until = platform_ms() + 3000;   // a note from loading is seen from the first frame
+    if (platform_model() != 4) umd_start();   // a PSP Go has no drive
     int chime_freed = 0;
 
     InputRepeat repeat = { 0, 0 };
@@ -701,6 +793,10 @@ int main(int argc, char *argv[]) {
     perfstat_init(&app.perf, platform_ms());
     for (;;) {
         app.now_ms = platform_ms();
+        {
+            UmdEvent ue;
+            while (umd_take_event(&ue)) umd_event(&app, &ue);
+        }
         if (!chime_freed) chime_freed = sfx_free_chime();   // ~200 KB back once the welcome chime ended
         if (frame_start) {   // the previous frame: work until present vs the whole frame
             uint32_t busy = gfx_present_ms() - frame_start;

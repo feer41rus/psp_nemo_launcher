@@ -22,11 +22,24 @@
 ## Музыка
 - **MP3PlayerPlugin** от plum_429 — https://github.com/PSP-Archive/MP3PlayerPlugin (GPL-3.0) — фоновая музыка в XMB и играх; основа запланированного плагина музыки в играх (1.2).
 - **vshbgm** от Koutsie — https://github.com/PSP-Archive/vshbgm (GPL-2.0) — пример фоновой музыки в VSH на `sceAudiocodec`.
-- **BatterySteve** от koutsie — https://github.com/koutsie/BatterySteve (лицензия не указана) — идея теста реальной ёмкости аккумулятора разрядом под нагрузкой (код не копировался).
 - **pspmp3 / sceMp3** (PSPSDK, BSD) — https://github.com/pspdev/pspsdk — аппаратный декодер MP3 (Media Engine).
 - **dr_flac** от David Reid — https://github.com/mackron/dr_libs (public domain или MIT-0) — декодер FLAC (v0.12.42, копия из SDL_mixer 2.8.1); SDL_mixer в pspdev собран без FLAC.
 - **The Mp3 Info Tag (LAME tag)** от Gabriel Bouvigne — http://gabriel.mp3-tech.org/mp3infotag.html — формат Xing/Info и LAME-тега: число кадров, TOC для перемотки, задержка кодировщика и добивка для бесшовного воспроизведения.
 - **Заголовок VBRI** (Fraunhofer) — справочник для разбора (код не копировался).
+
+## Аккумулятор
+- **BatterySteve** от koutsie — https://github.com/koutsie/BatterySteve (лицензия не указана) — идея теста реальной ёмкости аккумулятора разрядом под нагрузкой (код не копировался).
+
+## DLC и UMD
+- **ARK-5 / PRO CFW: NoDRM (Stargate)** — https://github.com/PSP-Arkfive/ARK-5 (GPL-3.0) — `Stargate/src/nodrm_patch.c` отдаёт играм расшифрованные DLC (`.edat`) без плагинов; Nemo только раскладывает файлы (справочник, код не копировался).
+- **Launcher-Menus / arkMenu** (GPL-3.0) — `umd.cpp`: как запускать игру с диска UMD и с обновлением `PBOOT.PBP` (справочник, код не копировался).
+- **RetroAchievements: Working with DLC for the PlayStation Portable** — https://docs.retroachievements.org/Working-with-DLC-for-the-PlayStation-Portable — где игры ищут DLC и почему ID должен совпадать с версией игры.
+- **NPloader и NPdecrypter** (GameBrew) — https://www.gamebrew.org/wiki/NPloader_DLC_loader_PSP, https://gamebrew.org/wiki/NPdecrypter_PSP — как раньше подключали расшифрованные DLC плагином (справочник; в ARK-5 не нужны).
+
+## Control Center (окно по HOME в играх)
+- **CustomHOME** от ABCanG — https://www.gamebrew.org/wiki/CustomHOME_PSP (лицензия не указана) — идея своего меню по HOME в играх (код не копировался).
+- **Custom Home Mod** от suloku — https://gamebrew.org/wiki/Custom_Home_Mod_PSP (лицензия не указана) — набор функций такого меню (код не копировался).
+- **PSP-HUD** от ErikPshat — https://github.com/ErikPshat/PSP-HUD (лицензия не указана) — идея рисования поверх кадра игры через перехват вывода кадра (код не копировался).
 
 ## Инструменты и библиотеки
 - **pspdev / PSPSDK** — https://github.com/pspdev/pspdev (BSD) и Docker-образ `pspdev/pspdev` — тулчейн PSP.
@@ -34,4 +47,4 @@
 - **SDL2, SDL2_mixer, SDL2_ttf, SDL2_image** — https://github.com/libsdl-org (zlib) — графика, звук, шрифты, картинки.
 - **SDL2_gfx** — https://www.ferzkopp.net/wordpress/2016/01/02/sdl_gfx-sdl2_gfx/ (zlib) — примитивы (скругления, окружности).
 - **cJSON** — https://github.com/DaveGamble/cJSON (MIT) — JSON для данных Nemo.
-- **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — шрифт интерфейса (урезан до латиницы и кириллицы).
+- **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — шрифт интерфейса (урезан до латиницы и кириллицы) и растровый шрифт окна Control Center.

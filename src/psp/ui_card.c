@@ -1,8 +1,16 @@
 #include "ui.h"
+#include "gamesize.h"
 #include "art.h"
 #include "gfx.h"
 #include <stdio.h>
 #include <string.h>
+
+// A rounded, half see-through bubble in Nemo's blue with white text (1.2.5: game format/size, "DLC: installed").
+static void bubble(int x, int y, const char *text) {
+    int w = gfx_text_width(FONT_SMALL, text) + 16;
+    gfx_round_rect(x, y, w, 18, 9, 0x6fb0ff80);
+    gfx_text(FONT_SMALL, x + 8, y + 2, 0xffffffff, text);
+}
 
 void ui_card_draw(App *app) {
     int game = app->nav.card_game;
@@ -29,7 +37,14 @@ void ui_card_draw(App *app) {
     gfx_round_rect_outline(x - 1, y - 1, 146, 82, 6, 0xffffff40);
 
     int ix = x + 160;
-    gfx_text(FONT_SMALL, ix, y + 2, COL_MUTED, ui_kind_label(g));
+    {   // "PSP · ISO · 865 МБ" (1.2.5): kind, file format, size on the card — in a bubble, easy to read
+        char kind[96], size[24] = "";
+        if (app->card_bytes >= 0) game_size_text(size, sizeof size, app->card_bytes, i18n_get() == LANG_EN);
+        const char *fmt = game_format_label(g);
+        if (g->format == GF_UMD) snprintf(kind, sizeof kind, "%s", fmt);
+        else snprintf(kind, sizeof kind, "%s · %s%s%s", ui_kind_label(g), fmt, size[0] ? " · " : "", size);
+        bubble(ix, y, kind);
+    }
     // Folders this game belongs to.
     char folders[160] = "";
     for (int f = 0; f < app->lib->folder_count; f++) {
@@ -40,8 +55,9 @@ void ui_card_draw(App *app) {
     if (folders[0]) {
         char line[200];
         snprintf(line, sizeof line, "%s %s", tr(S_IN_FOLDERS), folders);
-        gfx_text_fit(FONT_SMALL, ix, y + 20, SCREEN_W - ix - 16, COL_MUTED, line);
+        gfx_text_fit(FONT_SMALL, ix, y + 24, SCREEN_W - ix - 16, COL_MUTED, line);
     }
+    if (app->card_dlc) bubble(ix, y + (folders[0] ? 42 : 24), tr(S_CARD_DLC));
 
     int ty = y + 92;
     gfx_text_fit(FONT_TITLE, x, ty, SCREEN_W - x - 20, COL_TEXT, g->title);

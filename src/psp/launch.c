@@ -103,6 +103,21 @@ int launch_game(const Game *g, int disc) {
         exec_param(&param, "pops", launch_path);
         rc = sctrlKernelLoadExecVSHWithApitype(POPS_RUNLEVEL, launch_path, &param);
         break;
+    case GF_UMD: {   // the disc in the drive, as ARK's own launcher starts it (arkMenu umd.cpp, GPL)
+        int apitype = 0x120;
+        char update[64];
+        snprintf(update, sizeof update, "ms0:/PSP/GAME/%s/PBOOT.PBP", g->disc_id);
+        if (g->disc_id[0] && file_exists(update)) {
+            apitype = 0x160;
+            snprintf(launch_path, sizeof launch_path, "%s", update);
+        } else snprintf(launch_path, sizeof launch_path, "disc0:/PSP_GAME/SYSDIR/EBOOT.BIN");
+        exec_param(&param, "game", launch_path);
+        sctrlSESetDiscType(PSP_UMD_TYPE_GAME);
+        sctrlSESetBootConfFileIndex(MODE_UMD);
+        sctrlSESetUmdFile("");
+        rc = sctrlKernelLoadExecVSHWithApitype(apitype, launch_path, &param);
+        break;
+    }
     default:
         exec_param(&param, "game", launch_path);
         rc = sctrlKernelLoadExecVSHWithApitype(HOMEBREW_RUNLEVEL, launch_path, &param);

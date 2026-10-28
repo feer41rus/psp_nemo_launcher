@@ -30,6 +30,7 @@ typedef struct {
     int splash_hello;  // welcome splash at power-on (1.2.3, default on)
     int splash_ncl;    // NCL thank-you splash: shown once at the next power-on, then off (1.2.3, default off)
     int ui_sounds;     // interface clicks (1.2.3, default on)
+    int control_center;   // Control Center plugin in games (1.2.4, default on)
 } NemoSettings;
 
 void library_settings_defaults(NemoSettings *s);

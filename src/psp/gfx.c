@@ -5,6 +5,7 @@
 #include <string.h>
 #include <pspdisplay.h>
 #include "utf8.h"
+#include "ccdraw.h"
 #include "platform.h"
 
 extern const unsigned char font_regular[], font_semibold[];
@@ -257,8 +258,24 @@ void gfx_rect(int x, int y, int w, int h, uint32_t rgba) {
     SDL_RenderFillRect(renderer, &r);
 }
 
+// Row by row, each row once: roundedBoxRGBA covers the middle row of a pill (r = h/2) twice, a darker
+// stripe in a see-through bubble (1.2.5). Same arc as the Control Center window, edges anti-aliased.
 void gfx_round_rect(int x, int y, int w, int h, int r, uint32_t rgba) {
-    roundedBoxRGBA(renderer, x, y, x + w - 1, y + h - 1, r, R(rgba), G(rgba), B(rgba), A(rgba));
+    for (int j = 0; j < h; j++) {
+        int edge = ccdraw_round_edge(w, h, r, j);
+        if (edge < 0) {   // the rows between the corners in one go
+            int k = j;
+            while (k < h && ccdraw_round_edge(w, h, r, k) < 0) k++;
+            gfx_rect(x, y + j, w, k - j, rgba);
+            j = k - 1;
+            continue;
+        }
+        int inset = edge >> 4, a = (int)A(rgba) * (16 - (edge & 15)) / 16;
+        gfx_rect(x + inset + 1, y + j, w - 2 * inset - 2, 1, rgba);
+        uint32_t px = (rgba & 0xffffff00u) | (uint32_t)a;
+        gfx_rect(x + inset, y + j, 1, 1, px);
+        gfx_rect(x + w - 1 - inset, y + j, 1, 1, px);
+    }
 }
 
 void gfx_disc(int cx, int cy, int r, uint32_t rgba) {
