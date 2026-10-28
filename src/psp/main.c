@@ -371,7 +371,7 @@ static void handle_action(App *a, Action act) {
     }
     uint32_t sig = focus_sig(a);
     // Screens that keep their cursor behind a pointer are not in the signature: no edge sound there.
-    int own = a->plug || a->page || a->saves || a->battery;
+    int own = a->plug || a->page || a->saves || a->battery || a->memory;
     handle_action_inner(a, act);
     // Only up/down know an edge; left/right also change values (settings, seeking, equalizer).
     int moved = own || act == ACT_LEFT || act == ACT_RIGHT || focus_sig(a) != sig;
@@ -402,10 +402,12 @@ static void handle_action_inner(App *a, Action act) {
         while (a->page) textpage_action(a, ACT_BACK);
         if (a->saves) saves_action(a, ACT_BACK);
         if (a->battery) battery_action(a, ACT_HOME);
+        if (a->memory) memory_action(a, ACT_HOME);
         a->gm_open = 0;
     }
     if (a->page && act != ACT_HOME) { textpage_action(a, act); return; }
     if (a->battery && act != ACT_HOME) { battery_action(a, act); return; }
+    if (a->memory && act != ACT_HOME) { memory_action(a, act); return; }
     if (a->saves && act != ACT_HOME) { saves_action(a, act); return; }
     if (nav_top(&a->nav) == SCR_CARD && act != ACT_HOME) {   // game card: △ = game menu
         if (a->gm_open) { gamemenu_action(a, act); return; }
@@ -467,6 +469,8 @@ static void draw_hints(App *a) {
         ui_hints_draw(a, h, 1);
     } else if (a->battery) {
         battery_draw_hints(a);
+    } else if (a->memory) {
+        memory_draw_hints(a);
     } else if (a->saves) {
         saves_draw_hints(a);
     } else if (top == SCR_CARD && a->gm_open) {
@@ -538,6 +542,8 @@ static void draw(App *a) {
         textpage_draw(a);
     } else if (a->battery) {
         battery_draw(a);
+    } else if (a->memory) {
+        memory_draw(a);
     } else if (a->saves) {
         saves_draw(a);
     } else if (card_below) {
@@ -861,6 +867,7 @@ int main(int argc, char *argv[]) {
         network_tick(&app);
         selfguard_tick(&app);
         battery_tick(&app);
+        memory_tick(&app);
         battery_learn_tick(&app);
         {   // USB / FTP screens: screen off after a minute without a press (listening mode has its own)
             static int idle_blanked;

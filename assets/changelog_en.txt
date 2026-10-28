@@ -1,3 +1,6 @@
+# 1.2.6 — Memory
+- "Settings › About PSP › Memory": free space on the card; "What uses the space" — on request Nemo counts how much games, DLC, saves, music, photos and video take; "Details" — the card's file system, cluster size, RAM and system flash. On a PSP Go the internal storage comes first (←→ — the card).
+
 # 1.2.5 — DLC and UMD
 - "Add-ons (DLC)" in the game card's Triangle menu — "Install DLC": DLC from the "PSP/NEMO/install_dlc" folder goes into the game's folder by itself. DLC for another version of the game can be adapted (Nemo asks). Encrypted DLC without a licence is not installed — Nemo warns. The card shows "DLC: installed".
 - "Add-ons (DLC) › Installed DLC": the DLC with names and sizes, mark some and delete them — the game's and other DLC's files stay.

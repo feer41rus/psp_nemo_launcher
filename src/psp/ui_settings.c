@@ -40,6 +40,7 @@ void settings_load_language(void) {
 
 void settings_init(App *a) {
     setmenu_init(&a->setmenu, a->has_wifi);
+    a->setmenu.is_go = platform_model() == 4;   // PSP Go: internal storage rows (1.2.6)
     a->setmenu.show_site = a->lib->settings.site;
     int v;
     a->date_format = sysreg_get_int(DATE_DIR, "date_format", &v) == 0 && v >= 0 && v <= 2 ? v : DF_YMD;
@@ -350,6 +351,8 @@ static void activate(App *a, SetId id) {
     case SID_SAVES: saves_open(a, NULL, tr(S_ST_SAVES)); break;
     case SID_BAT_DETAILS: battery_open(a, BATS_DETAILS); break;
     case SID_BAT_TEST: battery_open(a, BATS_TEST); break;
+    case SID_MEM_USAGE: memory_open(a, MEMS_USAGE); break;
+    case SID_MEM_DETAILS: memory_open(a, MEMS_DETAILS); break;
     case SID_CREATORS: textpage_open(a, S_ST_CREATORS, tr(S_AB_CREATORS_TEXT)); break;
     case SID_TESTERS: open_embedded(a, S_ST_TESTERS, testers_txt, testers_txt_size); break;
     case SID_NEMO_VERSION:                    // assets/changelog_ru.txt / changelog_en.txt (1.2.0)
@@ -572,6 +575,7 @@ void settings_clock_prompt_action(App *a, Action act) {
             a->nav.tab = TAB_SETTINGS;
             a->nav.depth = 0;
             setmenu_init(&a->setmenu, a->has_wifi);
+            a->setmenu.is_go = platform_model() == 4;   // PSP Go: internal storage rows (1.2.6)
             setmenu_handle(&a->setmenu, ACT_CONFIRM, VISIBLE_ROWS);   // root row 0 = Time
             open_date_editor(a);
         }
@@ -667,6 +671,8 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
     case SID_NEMO_VERSION:
         snprintf(out, cap, "%s", NEMO_VERSION);   // the stage name lives in "Changes" (1.2.0)
         break;
+    case SID_MEM_FREE: memory_free_text("ms0:", out, cap); break;
+    case SID_MEM_FREE_INT: memory_free_text("ef0:", out, cap); break;   // PSP Go only
     case SID_MODEL: {
         char gen[8];
         device_gen_string(platform_model(), gen, sizeof gen);
@@ -678,6 +684,11 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
         else if (e->kind == SK_SUBMENU) snprintf(out, cap, "›");
         break;
     }
+}
+
+void settings_ark_value_text(const App *a, SetId id, char *out, size_t cap) {
+    out[0] = '\0';
+    value_text(a, setmenu_entry(id), out, cap);
 }
 
 static void draw_row(const App *a, const SetEntry *e, int y, int sel) {

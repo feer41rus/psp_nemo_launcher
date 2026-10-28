@@ -22,6 +22,7 @@ Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console leag
 - **Settings** shared with the XMB: date/time (fixes a 1970 clock), formats, time zone, nickname, system language, brightness, backlight auto-off, auto sleep, confirm button.
 - **ARK settings** in Nemo: USB charging, extra memory, memory stick speedup, Inferno cache, Sony logo skip, LEDs/UMD/analog stick, UMD region, **overclock** (games / XMB / Nemo, up to 443 MHz — experimental, at your own risk), **plugin manager**.
 - **Battery** (Settings › About PSP): charge, voltage, temperature, capacity and wear, cycles and serial number; a real-capacity test with its own load and result graphs (PSP Go / E1000 readings may be inaccurate).
+- **Memory** (Settings › About PSP): free space on the card; on request, what uses the space (ISO/CSO games, games and apps, DLC, saves, music, photos, video, ARK and Nemo); details — the card's file system, cluster size, RAM, internal flash, UMD size. On a PSP Go the internal storage comes first, ←→ switches.
 - **Power window**: hold HOME 1 s — sleep, restart, turn off (and exit to XMB if enabled).
 - **Nemo instead of XMB**: the PSP starts straight into Nemo; two failed starts in a row switch it off automatically. A backup copy (`PSP/APP/CUSTOM`, XMB item "Nemo Launcher (backup)") restores Nemo if an ARK update replaces it.
 - Russian and English interface, following the system language.
@@ -151,7 +152,7 @@ Thanks to the projects Nemo Launcher is built on or learned from.
 - **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — the interface font (cut down to Latin and Cyrillic).
 <!-- credits:end -->
 
-**Beta testers:** Schastlivyy Vladislav (feer41rus), Alexander NCL.
+**Beta testers:** Schastlivyy Vladislav (feer41rus), Saint Nemo.
 
 Artificial intelligence (Claude) was used to create Nemo Launcher.
 

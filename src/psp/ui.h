@@ -144,6 +144,7 @@ typedef struct {
     struct TextPage *page;      // About › Creators / Testers / Thanks (textpage.c)
     struct SavesScreen *saves;  // saved data: from the game card or Settings (ui_saves.c)
     struct BatteryScreen *battery;   // battery screens (ui_battery.c, 1.2.2)
+    struct MemoryScreen *memory;     // memory screens (ui_memory.c, 1.2.6)
     int gm_open, gm_sel, gm_mode, gm_pick, gm_yes, gm_with_saves, gm_list;   // game card menu (gamemenu.c)
     int rx_stage, rx_yes;       // "ARK replaced Nemo, restore?" (selfguard.c)
     float net_scroll;
@@ -254,6 +255,15 @@ int  battery_running(const App *a);
 void battery_startup_check(App *a);            // a log left open by a self power-off: result toast
 void cc_deploy(App *a);                        // Control Center plugin file + PLUGINS.TXT line (ccdeploy.c, 1.2.4)
 void battery_learn_tick(App *a);               // every frame: Nemo's drain model learns on battery
+// Memory (ui_memory.c, 1.2.6): what uses the card (counted on the button) and details; view only
+typedef enum { MEMS_USAGE, MEMS_DETAILS } MemScreenKind;
+void memory_open(App *a, MemScreenKind k);
+void memory_action(App *a, Action act);
+void memory_draw(const App *a);
+void memory_draw_hints(const App *a);
+void memory_tick(App *a);
+void memory_free_text(const char *dev, char *out, size_t cap);  // "12,3 ГБ из 29,8 ГБ", "" if unreadable
+void settings_ark_value_text(const App *a, SetId id, char *out, size_t cap);   // as the ARK row shows it
 // Game card menu (gamemenu.c)
 void gamemenu_open(App *a);
 void gamemenu_action(App *a, Action act);

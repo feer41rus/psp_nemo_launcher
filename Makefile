@@ -88,17 +88,15 @@ REL        := build/release
 REL_NAME   := Nemo_Launcher_$(VERSION)_$(CHANNEL)
 ARK_DIR    := PSP/SAVEDATA/ARK_01234
 
-release: psp   # run "make test" locally first (tests are not published)
+release: psp   # run "make test" locally first (tests are not published); guides/ stay on GitHub, not in the archives (author, 2026-10-28)
 	rm -rf $(REL) && mkdir -p $(REL)/lite/$(ARK_DIR) $(REL)/full dist/release
 	cp dist/VBOOT.PBP dist/lang_ru.json dist/lang_en.json $(REL)/lite/$(ARK_DIR)/
 	cp README.md README.ru.md LICENSE $(REL)/lite/
-	cp -r guides $(REL)/lite/
 	cd $(REL)/lite && zip -qr "$(CURDIR)/dist/release/$(REL_NAME)_lite_no_ark-5.zip" .
 	unzip -q "$(ARK_FULL)" "PSP/*" -d $(REL)/full
 	mv $(REL)/full/$(ARK_DIR)/VBOOT.PBP $(REL)/full/$(ARK_DIR)/VBOOT_ARK.PBP
 	cp dist/VBOOT.PBP dist/lang_ru.json dist/lang_en.json $(REL)/full/$(ARK_DIR)/
 	cp README.md README.ru.md LICENSE $(REL)/full/
-	cp -r guides $(REL)/full/
 	cd $(REL)/full && zip -qr "$(CURDIR)/dist/release/$(REL_NAME)_full_with_ark-5.zip" .
 	@ls -l dist/release/
 
