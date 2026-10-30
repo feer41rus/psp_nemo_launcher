@@ -12,16 +12,19 @@ Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console leag
 
 ## Features
 
-- **Home and Library**: covers and backgrounds from the games, "Continue" banner, recently played, your own folders, on-screen keyboard (Russian/English).
+- **Home and Library**: covers and backgrounds from the games, "Continue" banner, recently played, your own folders, a "Low on space" badge when the card (on a PSP Go also the internal storage) is running out of space, on-screen keyboard (Russian/English). The Library has its own background under a matte coat: six Nemo pictures about choice and possibility (their meaning, in Russian: [assets/backgrounds/README.md](assets/backgrounds/README.md)) or your own from the Gallery — Settings › System › Nemo › Library background.
 - **Games**: PSP ISO/CSO, PSN and homebrew EBOOTs, PS1 EBOOTs with multi-disc grouping. Game card with the format and size ("ISO · 865 MB"), **saved data** management, **add-ons (DLC)**, a **per-game CPU clock** and **deleting a game** (with confirmations).
 - **Music player**: MP3 through the PSP's **hardware decoder** (instant track switching, low CPU), FLAC (16/24-bit, up to 48 kHz), OGG and WAV in software; queue, shuffle/repeat, favourites, playlists, sleep timer, listening mode with the screen off, Albums / Artists / Folders / All tracks views (□ button), `.m3u` playlist import and export, a 5-band equalizer with presets, ♪ / Select+L/R controls (PSP Go / E1000 have no ♪ key).
 - **Splash screens and sounds**: at power-on — "Welcome! Your PSP. The way it should be." with a chime (any button skips); for sold consoles — a one-time "Thank you for buying your console from NCL" ("NCL screen › On next start"); quiet XMB-like interface sounds, silent while music plays. All set in "Settings › System › Nemo".
 - **Control Center**: in PSP games and homebrew, HOME opens Nemo's window instead of the Sony one — resume, screenshot, volume, brightness, quit; the ARK plugin is installed and enabled by Nemo itself ("Settings › System › Nemo › Control Center"). The plugin manager describes every plugin.
 - **DLC and UMD**: "Add-ons (DLC)" in the game card's Triangle menu: install and delete DLC — put the DLC into `PSP/NEMO/install_dlc` and Nemo moves it into the game's folder (DLC for another version of the game is adapted with your consent), remembers what it installed and deletes the DLC you choose — see the [DLC guide](guides/dlc.md); an inserted UMD appears on Home at once, START on the "UMD inserted" note plays it.
-- **Network**: Wi‑Fi scanning and connecting (WPA2 via ARK), **FTP server**, **USB** mass storage; the library rescans itself afterwards.
-- **Settings** shared with the XMB: date/time (fixes a 1970 clock), formats, time zone, nickname, system language, brightness, backlight auto-off, auto sleep, confirm button.
+- **Network**: Wi‑Fi scanning and connecting (WPA2 via ARK), **FTP server**, **USB** mass storage; the library rescans itself afterwards. On a PSP Go — a **Bluetooth** section (view only for now) and an icon at the top while a device is connected.
+- **Settings** shared with the XMB: date/time (fixes a 1970 clock), formats, time zone, nickname, system language, screen brightness (4 levels, System › Screen brightness), backlight auto-off, auto sleep, confirm button.
 - **ARK settings** in Nemo: USB charging, extra memory, memory stick speedup, Inferno cache, Sony logo skip, LEDs/UMD/analog stick, UMD region, **overclock** (games / XMB / Nemo, up to 443 MHz — experimental, at your own risk), **plugin manager**.
 - **Battery** (Settings › About PSP): charge, voltage, temperature, capacity and wear, cycles and serial number; a real-capacity test with its own load and result graphs (PSP Go / E1000 readings may be inaccurate).
+- **Organizer** (tab before Music): Gallery, File manager, Video, Camera (Go!Cam: photos, video with sound, filters). UMD Video and UMD Music discs play in Nemo. **File manager** — the card's folders (and a PSP Go's internal storage): copy, move, delete, rename, new folder; a text editor for configs with search. The tab can be hidden: Settings › System › Nemo.
+- **Video**: the videos of `VIDEO/` — MP4 films made for the PSP (H.264 Baseline/Main up to 480×272, AAC) in hardware, camera video (AVI/MOV, Motion JPEG), UMD Video discs; .srt/.ass and embedded subtitles (Cyrillic), "Continue from where you stopped".
+- **Gallery**: every picture in `PICTURE` and `DCIM` as thumbnails; full screen — browse, zoom, rotate (saved into the file, large photos in parts), delete and set as the Library background (Triangle › "Set as Library background"). Game screenshots go to `PICTURE/Nemo/Games`, Nemo screenshots to `PICTURE/Nemo/Screenshots`.
 - **Memory** (Settings › About PSP): free space on the card; on request, what uses the space (ISO/CSO games, games and apps, DLC, saves, music, photos, video, ARK and Nemo); details — the card's file system, cluster size, RAM, internal flash, UMD size. On a PSP Go the internal storage comes first, ←→ switches.
 - **Power window**: hold HOME 1 s — sleep, restart, turn off (and exit to XMB if enabled).
 - **Nemo instead of XMB**: the PSP starts straight into Nemo; two failed starts in a row switch it off automatically. A backup copy (`PSP/APP/CUSTOM`, XMB item "Nemo Launcher (backup)") restores Nemo if an ARK update replaces it.
@@ -33,11 +36,11 @@ Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console leag
 |---|---|
 | ✕ / ○ | Select / back (which one selects follows XMB, Settings › System › Confirm button) |
 | D-pad, analog stick | Move; ← → on a shelf scroll the games |
-| L / R | Previous / next tab |
-| △ | Action menu (game, folder, track); in a password field — show / hide the characters |
+| L / R | Previous / next tab; on Now Playing and with the screen off (listening mode) — previous / next track |
+| △ | Action menu (game — to a folder, delete the game; folder; track); in a password field — show / hide the characters |
 | □ | Quick action: on a shelf — add to folder, in the queue — remove the track, on the keyboard — delete a character |
 | □ in Music | Library view: Albums → Artists → Folders → All tracks; on the equalizer screen — reset |
-| START | On the keyboard — done; in Music — Now Playing; on the "UMD inserted" note — play the disc |
+| START | On the keyboard — done; in Music — Now Playing (full screen, Circle — back to the library); on the "UMD inserted" note — play the disc |
 | HOME (press) | Go Home / close a window |
 | HOME (hold 1 s) | Power window: sleep, restart, turn off, exit to XMB |
 | HOME in a game | Control Center: resume, screenshot, volume (← → or the volume keys), brightness, quit |
@@ -45,7 +48,7 @@ Made with ❤ by Schastlivyy Vladislav together with **NCL — Nemo console leag
 | ♪+L / ♪+R | Previous / next track |
 | SELECT+L / SELECT+R | The same, for PSP Go and E1000 (no ♪ button); with the screen off it stays off |
 | SELECT on Now Playing | Listening mode (screen off); a short SELECT turns the screen back on |
-| SELECT+START | Screenshot to `PSP/NEMO/screenshots/` |
+| SELECT+START | Screenshot to `PICTURE/Nemo/Screenshots/` |
 | SELECT+△ | Debug: the bottom line and the RAM / CPU / FPS box (Settings › System › Debug) |
 | Volume + / − | Volume (Nemo's own indicator) |
 | Headphone remote | Pause, next / previous track |
@@ -149,7 +152,15 @@ Thanks to the projects Nemo Launcher is built on or learned from.
 - **SDL2, SDL2_mixer, SDL2_ttf, SDL2_image** — https://github.com/libsdl-org (zlib) — graphics, sound, fonts, images.
 - **SDL2_gfx** — https://www.ferzkopp.net/wordpress/2016/01/02/sdl_gfx-sdl2_gfx/ (zlib) — primitives (rounded rectangles, circles).
 - **cJSON** — https://github.com/DaveGamble/cJSON (MIT) — JSON for Nemo's data.
+- **libjpeg-turbo** — https://github.com/libjpeg-turbo/libjpeg-turbo (IJG + BSD-3-Clause + zlib) — Photos: fast scaled JPEG decoding, lossless rotation, row-by-row writing of large photos.
+- **libpng** — http://www.libpng.org/pub/png/libpng.html (libpng license) — Photos: row-by-row PNG reading and writing when rotating large photos.
+- **PMP Mod AVC — avc.c** (Sorin P. C. "magiK", copy in openTri) — https://github.com/albe/openTri/blob/main/src/pmp/avc.c (GPL-2.0-or-later) — Video: how to feed H.264 frames to the PSP's hardware decoder (`sceMpegAvcDecode`, copying the frame into the Media Engine).
+- **cooleyes — avcdecoder sample (PMPlayer Advance)** — https://archive.org/details/avcdecoder-3xx.-7z (GPL-2.0-or-later) — Video: the call order for H.264 in MP4 through `mpeg_vsh` (`sceMpegGetAvcNalAu`, `sceMpegAvcDecodeDetail2`, `sceMpegBaseCscAvc`), their NIDs, the Media Engine modes.
+- **PPSSPP** — https://github.com/hrydgard/ppsspp (GPL-2.0-or-later) — a reference for how `sceMpeg`/`sceJpeg` behave, and the finding that the XMB boots the Media Engine in mode 3 (`sceMeBootStart`, PR #22768).
+- **LightMP3** (Sakya et al.) — https://wololo.net/talk/viewtopic.php?t=48108 (GPL) — the `sceMeBootStart` NID for 6.60/6.61 (`0x5DFF5C50`).
 - **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — the interface font (cut down to Latin and Cyrillic).
+- **Pillow** — https://github.com/python-pillow/Pillow (MIT-CMU) and **NumPy** — https://github.com/numpy/numpy (BSD-3-Clause) — the Library background generator (`tools/make_library_bgs.py`): drawing, glow, the matte coat.
+- **Mr. Nobody (directed by Jaco Van Dormael, 2009)** — the idea behind the name Nemo and the meaning of the Library backgrounds: choice, possibility, other paths. Nemo contains no frames from the film.
 <!-- credits:end -->
 
 **Beta testers:** Schastlivyy Vladislav (feer41rus), Saint Nemo.

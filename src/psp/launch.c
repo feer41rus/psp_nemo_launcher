@@ -1,4 +1,5 @@
 #include "launch.h"
+#include "log.h"
 #include "blockdev.h"
 #include "iso9660.h"
 #include "platform.h"
@@ -72,6 +73,7 @@ int launch_game(const Game *g, int disc) {
 
     struct SceKernelLoadExecVSHParam param;
     int rc;
+    log_dbg("launch: \"%s\" format %d disc %d/%d path %s id %s", g->title, (int)g->format, disc, g->disc_count, launch_path, g->disc_id);
     switch (g->format) {
     case GF_ISO:
         snprintf(boot_path, sizeof boot_path, "%s", iso_boot_file(launch_path));
@@ -124,6 +126,7 @@ int launch_game(const Game *g, int disc) {
         break;
     }
     // Only reached when the firmware refused to start the game.
+    log_fail("launch: %s refused, rc %08x", launch_path, (unsigned)rc);
     launch_mark_away(0);
     platform_set_launcher_mode(0);
     return rc < 0 ? rc : -1;

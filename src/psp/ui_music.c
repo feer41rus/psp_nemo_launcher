@@ -350,6 +350,11 @@ void ui_music_draw(App *a) {
         gfx_text_fit(FONT_BODY, 20, 120, SCREEN_W - 40, COL_MUTED, t);
         return;
     }
+    if (a->mlib.track_count == 0 && a->music_lib_loading) {   // 1.3.1: read after start-up
+        const char *t = tr(S_MUSIC_LOADING);
+        gfx_text(FONT_BODY, (SCREEN_W - gfx_text_width(FONT_BODY, t)) / 2, 110, COL_MUTED, t);
+        return;
+    }
     if (a->mlib.track_count == 0) {
         const char *t = tr(S_MUSIC_NONE), *h = tr(S_MUSIC_NONE_HINT);
         gfx_text(FONT_TITLE, (SCREEN_W - gfx_text_width(FONT_TITLE, t)) / 2, 74, COL_TEXT, t);

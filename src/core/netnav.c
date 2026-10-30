@@ -1,7 +1,7 @@
 #include "netnav.h"
 #include <string.h>
 
-void netnav_init(NetNav *n, int has_wifi) {
+void netnav_init(NetNav *n, int has_wifi, int is_go) {
     memset(n, 0, sizeof *n);
     n->has_wifi = has_wifi;
     if (has_wifi) {
@@ -12,6 +12,7 @@ void netnav_init(NetNav *n, int has_wifi) {
         n->sections[n->section_count++] = NS_USB;
         n->sections[n->section_count++] = NS_USBNET;
     }
+    if (is_go) n->sections[n->section_count++] = NS_BT;   // only the PSP Go has Bluetooth
 }
 
 NetSection netnav_current(const NetNav *n) { return n->sections[n->section]; }

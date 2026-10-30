@@ -34,6 +34,7 @@
 #include <pspsysmem.h>
 #include <systemctrl_se.h>
 #include "require.h"
+#include "photo_hw.h"
 
 PSP_MODULE_INFO("NemoLauncher", 0, 1, 0);
 PSP_MAIN_THREAD_ATTR(THREAD_ATTR_USER | THREAD_ATTR_VFPU);
@@ -65,6 +66,7 @@ void media_resume(App *a) {
     if (!a->media_suspended) return;
     a->media_suspended = 0;
     library_rescan(a);
+    photo_tab_invalidate(a);   // FTP may have brought or removed pictures
     platform_log_memory("media-resumed");
 }
 
@@ -112,9 +114,38 @@ static void umd_event(App *a, const UmdEvent *e) {
             a->umd_notice_until = a->now_ms + 5000;
         }
         break;
-    case UMD_EV_VIDEO: ui_toast(a, tr(S_UMD_VIDEO)); break;
-    case UMD_EV_MUSIC: ui_toast(a, tr(S_UMD_MUSIC)); break;
+    case UMD_EV_VIDEO:   // 1.3.3: Nemo's player; START on the notice plays it
+        a->umd_video = 1;
+        snprintf(a->umd_video_title, sizeof a->umd_video_title, "%s", e->title);
+        snprintf(a->umd_video_id, sizeof a->umd_video_id, "%s", e->disc_id);
+        if (!e->at_start) {
+            snprintf(a->umd_notice, sizeof a->umd_notice, tr(S_UMD_VIDEO), e->title);
+            a->umd_notice_until = a->now_ms + 5000;
+        }
+        break;
+    case UMD_EV_MUSIC:   // 1.3.5: an album in Music; START on its notice plays it
+        a->umd_music = 1;
+        snprintf(a->umd_music_title, sizeof a->umd_music_title, "%s", e->title);
+        a->umd_n_streams = e->n_streams;
+        memcpy(a->umd_streams, e->streams, sizeof a->umd_streams);
+        log_msg("umdmusic: disc \"%s\" (%s), %d streams", e->title, e->disc_id, e->n_streams);
+        if (!e->at_start) {
+            snprintf(a->umd_notice, sizeof a->umd_notice, tr(S_UMD_MUSIC), e->title);
+            a->umd_notice_until = a->now_ms + 5000;
+        }
+        break;
     case UMD_EV_REMOVED:
+        if (a->umd_music) {
+            a->umd_music = 0;
+            a->umd_notice_until = 0;
+            music_umd_detach(a);
+            ui_toast(a, tr(S_UMD_OUT));
+        }
+        if (a->umd_video) {
+            a->umd_video = 0;
+            a->umd_notice_until = 0;
+            ui_toast(a, tr(S_UMD_OUT));
+        }
         if (umd_index(a) >= 0) {
             umd_remove(a);
             rebuild_shelves(a);
@@ -132,7 +163,7 @@ static int typing(const App *a) {
 }
 
 static void draw_umd_notice(const App *a) {
-    const char *hint = tr(S_UMD_START);
+    const char *hint = tr(a->umd_music ? S_UMD_LISTEN : a->umd_video ? S_UMD_WATCH : S_UMD_START);
     int hw = gfx_text_width(FONT_SMALL, hint), w = 360, h = 30, x = (SCREEN_W - w) / 2, y = TOP_BAR_H + 6;
     gfx_round_rect(x, y, w, h, 12, 0x1a2230d8);
     gfx_round_rect(x + 10, y + 11, 4, 9, 2, COL_ACCENT);
@@ -142,6 +173,7 @@ static void draw_umd_notice(const App *a) {
 
 void library_rescan(App *a) {
     uint32_t t0 = platform_ms();
+    lowspace_invalidate();                    // after USB, FTP or a deleted game the free space changed
     int games_before = a->games.count, tracks_before = a->mlib.track_count;
     gamelist_free(&a->games);
     gamelist_init(&a->games);
@@ -154,6 +186,7 @@ void library_rescan(App *a) {
     art_reset();
     log_msg("rescan: %d games (was %d), %d tracks (was %d) in %u ms", a->games.count, games_before,
             a->mlib.track_count, tracks_before, (unsigned)(platform_ms() - t0));
+    log_time("rescan", platform_ms() - t0);
     char msg[128];
     snprintf(msg, sizeof msg, tr(S_RESCAN_DONE), a->games.count, a->mlib.track_count);
     ui_toast(a, msg);
@@ -180,6 +213,7 @@ static void build_model(App *a) {
     m->menu_count = a->menu_count;
     m->pick_count = a->lib->folder_count + 1;   // folders + "New folder…"
     if (!a->lib->settings.show_music) m->hidden_tabs |= 1u << TAB_MUSIC;
+    if (!a->lib->settings.show_photo) m->hidden_tabs |= 1u << TAB_ORGANIZER;
 }
 
 static void open_card_for(App *a, int game) {
@@ -219,6 +253,7 @@ static void open_menu(App *a) {
     if (a->menu_game >= 0) {   // "Details" was dropped: it duplicated X (open card)
         a->menu[a->menu_count++] = MI_TO_FOLDER;
         if (a->menu_folder >= 0) a->menu[a->menu_count++] = MI_REMOVE_FROM_FOLDER;
+        a->menu[a->menu_count++] = MI_DELETE_GAME;   // 1.3.9: without opening the card first
     }
     if (a->menu_folder >= 0) {
         a->menu[a->menu_count++] = MI_RENAME_FOLDER;
@@ -255,6 +290,12 @@ static void menu_pick(App *a, int index) {
         break;
     case MI_DELETE_FOLDER:
         nav_push(&a->nav, SCR_CONFIRM);
+        break;
+    case MI_DELETE_GAME:                       // the card's own question (and the saves one) over the card
+        nav_push(&a->nav, SCR_CARD);
+        open_card_for(a, a->menu_game);
+        gamemenu_ask_delete(a);
+        if (!a->gm_open && nav_top(&a->nav) == SCR_CARD) nav_pop(&a->nav);   // refused (a UMD disc): stay on the shelf
         break;
     }
 }
@@ -315,7 +356,11 @@ static void power_prepare(App *a, const char *what) {
     library_save(a->lib, NEMO_DATA_PATH);
     if (a->ftp.phase != FTP_OFF) ftpsrv_disable();
     net_shutdown();
+    photo_thumbs_stop();        // 1.3.1: no thumbnail being written while the PSP resets
+    files_worker_stop();        // 1.3.2: a copy is cancelled (its half file removed) first
     selfguard_clean_exit();
+    log_msg("power: %s: data saved, card flushed", what);
+    platform_sync_card();       // the log and saved data reach the card before the reset/power-off
 }
 
 void power_do(App *a, int item) {
@@ -334,6 +379,7 @@ void power_do(App *a, int item) {
 // HOME held for 3 s: open (or close) the power window. Not on the USB screen: the PC holds the stick.
 static void home_hold(App *a) {
     if (battery_running(a)) return;           // no power window during a battery test
+    if (organizer_busy(a)) return;            // 1.3.2: copying / unsaved text / keyboard own every button
     if (a->power.open) a->power.open = 0;
     else if (a->net_screen != NETS_USB) powermenu_open(&a->power, a->lib->settings.xmb_exit, a->now_ms);
 }
@@ -361,7 +407,32 @@ static uint32_t focus_sig(const App *a) {
     return fnv(h, v, sizeof v);
 }
 
+static const char *action_name(Action act) {
+    static const char *const N[] = { "none", "up", "down", "left", "right", "confirm", "back", "menu", "quick", "L", "R",
+                                     "start", "home", "note", "select" };
+    return (unsigned)act < sizeof N / sizeof N[0] ? N[act] : "?";
+}
+
 static void handle_action(App *a, Action act) {
+    log_dbg("input: %s on %s", action_name(act), perflog_screen());   // detailed log (1.3.3)
+    // review I4: not over USB (the PC owns the card), a battery test, a copy or unsaved text, the Gallery
+    if (act == ACT_START && a->now_ms < a->umd_notice_until && !typing(a) && a->umd_video && !usb_active() &&
+        !battery_running(a) && !organizer_busy(a) && !photo_tab_owns_buttons(a)) {
+        a->umd_notice_until = 0;   // START on the "UMD Video" notice: the film in Nemo's player (1.3.3)
+        while (a->nav.depth > 0) nav_pop(&a->nav);
+        a->nav.tab = TAB_ORGANIZER;
+        video_open_umd(a);
+        return;
+    }
+    if (act == ACT_START && a->now_ms < a->umd_notice_until && !typing(a) && a->umd_music && !usb_active() &&
+        !battery_running(a) && !organizer_busy(a) && !photo_tab_owns_buttons(a)) {
+        a->umd_notice_until = 0;   // START on the "UMD Music" notice: the album in Music (1.3.5)
+        log_msg("umdmusic: START on the notice (music %s, library %s)", a->music_off ? "off" : "on",
+                a->music_lib_loading ? "loading" : "ready");
+        if (a->music_off) { ui_toast(a, tr(S_UMD_MUSIC_OFF)); return; }
+        a->umd_music_play = 1;   // played by music_tick as soon as the album is in
+        return;
+    }
     if (act == ACT_START && a->now_ms < a->umd_notice_until && !typing(a) && umd_index(a) >= 0) {
         a->umd_notice_until = 0;   // START on the "UMD inserted" notice plays the disc (author)
         a->nav.card_game = umd_index(a);
@@ -382,6 +453,10 @@ static void handle_action(App *a, Action act) {
 static void handle_action_inner(App *a, Action act) {
     if (battery_running(a)) {                 // a battery test owns every button, HOME too (1.2.2)
         battery_action(a, act);
+        return;
+    }
+    if (organizer_busy(a)) {                  // rotating a photo, copying, unsaved text (1.3.1, 1.3.2)
+        organizer_action(a, act);
         return;
     }
     if (a->listening) {                       // listening mode: every button (even HOME) only wakes
@@ -419,11 +494,17 @@ static void handle_action_inner(App *a, Action act) {
         settings_action(a, act);
         return;
     }
+    // Organizer (1.3.2): the list leaves L/R/HOME global; its windows keep L/R (zoom, pages).
+    if (a->nav.tab == TAB_ORGANIZER && nav_top(&a->nav) == SCR_ROOT &&
+        (organizer_owns_buttons(a) ? act != ACT_HOME : (act != ACT_TAB_PREV && act != ACT_TAB_NEXT && act != ACT_HOME))) {
+        organizer_action(a, act);
+        return;
+    }
     // The Music tab has its own navigation; tabs (L/R) and HOME stay global, except while the
-    // playlist keyboard or listening mode is open (they own every button).
+    // playlist keyboard, listening mode or full-screen Now Playing (1.3.7: L/R = tracks) is open.
     if (a->nav.tab == TAB_MUSIC && nav_top(&a->nav) == SCR_ROOT) {
         MusicScreen mt = mnav_top(&a->mnav);
-        int owns_all = mt == MS_OSK || mt == MS_LISTEN;
+        int owns_all = mt == MS_OSK || mt == MS_LISTEN || music_fullscreen(a);
         if (owns_all ? act != ACT_HOME : (act != ACT_TAB_PREV && act != ACT_TAB_NEXT && act != ACT_HOME)) {
             music_action(a, act);
             return;
@@ -493,6 +574,8 @@ static void draw_hints(App *a) {
         static const Hint h[] = { { ACT_CONFIRM, S_HINT_OPEN }, { ACT_MENU, S_HINT_MENU },
                                   { ACT_QUICK, S_HINT_TO_FOLDER } };
         ui_hints_draw(a, h, 3);
+    } else if (a->nav.tab == TAB_ORGANIZER) {
+        organizer_hints(a);
     } else if (a->nav.tab == TAB_MUSIC) {
         music_draw_hints(a);
     } else if (a->nav.tab == TAB_NETWORK) {
@@ -517,10 +600,12 @@ static void draw_debug(App *a) {
     gfx_text(FONT_SMALL, 4, SCREEN_H - HINT_BAR_H - 15, 0x5fe0b0ff, line);
 }
 
-#define SHOT_DIR "ms0:/PSP/NEMO/screenshots"
+#define SHOT_DIR "ms0:/PICTURE/Nemo/Screenshots"   // 1.3.1: with every other picture (was PSP/NEMO/screenshots)
 
 static void take_screenshot(App *a) {
     if (usb_active()) return;                 // the memory stick belongs to the PC
+    mkdir("ms0:/PICTURE", 0777);
+    mkdir("ms0:/PICTURE/Nemo", 0777);
     mkdir(SHOT_DIR, 0777);
     char path[96];
     struct stat st;
@@ -532,6 +617,7 @@ static void take_screenshot(App *a) {
     log_msg("screenshot: %s rc=%d", path, rc);
     a->now_ms = platform_ms();   // saving the PNG takes ~2 s: time the toast from now, not frame start
     if (rc == 0) ui_toast(a, tr(S_SCREENSHOT_SAVED));
+    if (rc == 0) photo_tab_invalidate(a);
 }
 
 static void draw(App *a) {
@@ -553,6 +639,7 @@ static void draw(App *a) {
         switch (a->nav.tab) {
         case TAB_HOME: ui_shelves_draw(a, TAB_HOME); break;
         case TAB_LIBRARY: ui_shelves_draw(a, TAB_LIBRARY); break;
+        case TAB_ORGANIZER: organizer_draw(a); break;
         case TAB_MUSIC: ui_music_draw(a); break;
         case TAB_NETWORK: ui_network_draw(a); break;
         case TAB_SETTINGS: ui_settings_draw(a); break;
@@ -566,7 +653,8 @@ static void draw(App *a) {
     case SCR_OSK: ui_osk_draw(a); break;
     default: break;
     }
-    if (!network_fullscreen(a) && !battery_running(a)) ui_chrome_draw(a);
+    if (!network_fullscreen(a) && !battery_running(a) && !organizer_fullscreen(a) && !music_fullscreen(a))
+        ui_chrome_draw(a);
     draw_hints(a);
     settings_draw_overlays(a);
     selfguard_draw(a);
@@ -655,6 +743,7 @@ static void startup_load(App *a) {
     network_init(a);
     settings_init(a);
     cc_deploy(a);
+    photo_move_old_once();      // 1.3.1: screenshots into PICTURE/Nemo/{Games,Screenshots}
     battery_hw_init();
     battery_startup_check(a);   // a battery test that ran until the PSP switched off: its result
     log_msg("scan: start");
@@ -666,6 +755,7 @@ static void startup_load(App *a) {
     log_msg("scan: %d games in %u ms (parsed %d, cached %d), home shelves=%d continue=%d library shelves=%d",
             a->games.count, (unsigned)(platform_ms() - scan_start), scan_stats.parsed, scan_stats.reused,
             a->home_count, a->continue_game, a->library_count);
+    log_time("game_scan", platform_ms() - scan_start);
 }
 
 static App *load_app;
@@ -730,6 +820,7 @@ int main(int argc, char *argv[]) {
     SDL_SetMainReady();
     platform_init();
     log_open(library_peek_log_keep(NEMO_DATA_PATH));   // before anything logs (1.2.0)
+    if (library_peek_verbose(NEMO_DATA_PATH)) log_set_verbose(1);   // detailed log for beta testing (1.3.3)
     platform_memory_init();                             // before any other thread starts
     log_msg("Nemo Launcher %s (%s %s) start, arkpath=%s", NEMO_VERSION, __DATE__, __TIME__, platform_arkpath());
     {
@@ -781,6 +872,9 @@ int main(int argc, char *argv[]) {
         sfx_init();
     }
     log_msg("startup: menu after %u ms", (unsigned)(platform_ms() - start_ms));
+    uint32_t menu_ms = platform_ms();
+    log_time("startup", platform_ms() - start_ms);
+    if (log_verbose) diag_passport(&app);
     if (app.toast[0]) app.toast_until = platform_ms() + 3000;   // a note from loading is seen from the first frame
     if (platform_model() != 4) umd_start();   // a PSP Go has no drive
     int chime_freed = 0;
@@ -807,6 +901,7 @@ int main(int argc, char *argv[]) {
         if (frame_start) {   // the previous frame: work until present vs the whole frame
             uint32_t busy = gfx_present_ms() - frame_start;
             perfstat_frame(&app.perf, app.now_ms, busy, app.now_ms - frame_start);
+            perflog_frame(&app, app.now_ms - frame_start);
         }
         frame_start = 0;
         uint8_t lx, ly;
@@ -820,9 +915,9 @@ int main(int argc, char *argv[]) {
         HomeEvent home = app.listening ? HOME_NONE : homekey_update(&app.home_key, buttons, &pressed, app.now_ms);
         handle_volume(&app, pressed);
         NoteEvent note = notekey_update(&app.note, buttons, &pressed);   // ♪, ♪+L, ♪+R, SELECT+L/R
-        music_note(&app, note);
+        if (!video_win_is_open(&app) && !cam_win_is_open(&app)) music_note(&app, note);   // 1.3.3: one sound at a time, the video's
         u32 hprm = 0;
-        if (sceHprmPeekCurrentKey(&hprm) >= 0) music_hprm(&app, hprm);
+        if (sceHprmPeekCurrentKey(&hprm) >= 0 && !video_win_is_open(&app) && !cam_win_is_open(&app)) music_hprm(&app, hprm);   // review M11: one sound
         // SELECT is a modifier: SELECT+START = screenshot, SELECT+TRIANGLE = debug line.
         // SELECT alone (released without a combo): on Now Playing = listening mode; in listening mode = wake.
         // SELECT+L/R in listening mode switches the track and keeps the screen off.
@@ -834,6 +929,10 @@ int main(int argc, char *argv[]) {
                 combo = 1;
                 if (!app.listening) app.screenshot = 1;
             }
+            if (video_win_playing(&app) && (pressed & (NB_LEFT | NB_RIGHT))) {   // 1.3.3: subtitles 0.1 s earlier / later
+                combo = 1;
+                video_sub_shift(&app, (pressed & NB_RIGHT) ? 100 : -100);
+            }
             if (pressed & NB_TRIANGLE) {
                 combo = 1;
                 if (!app.listening) app.debug = !app.debug;
@@ -842,10 +941,12 @@ int main(int argc, char *argv[]) {
         }
         if (selectkey_update(&selk, buttons, combo) == SELK_TAP) {
             if (app.listening) music_action(&app, ACT_NONE);   // wakes the screen
+            else if (cam_win_is_open(&app)) cam_win_filter_next(&app);   // 1.3.6: the camera's filters
             else if (app.nav.tab == TAB_MUSIC && mnav_top(&app.mnav) == MS_NOW) music_enter_listening(&app);
         }
 
         int osk_open = nav_top(&app.nav) == SCR_OSK || (app.nav.tab == TAB_MUSIC && mnav_top(&app.mnav) == MS_OSK) ||
+                       files_osk_open(&app) ||
                        (app.nav.tab == TAB_NETWORK && app.net_screen == NETS_OSK) ||
                        (app.nav.tab == TAB_SETTINGS && app.nick_open);
         if (osk_open) osk_set_hold_shift(&app.osk, (buttons & NB_LTRIGGER) != 0);
@@ -864,10 +965,14 @@ int main(int argc, char *argv[]) {
             home_hold(&app);
         }
         music_tick(&app);
+        music_startup_scan(&app, menu_ms);
         network_tick(&app);
         selfguard_tick(&app);
         battery_tick(&app);
         memory_tick(&app);
+        organizer_tick(&app);
+        diag_tick(&app);
+        if (app.now_ms >= app.toast_until && log_take_hint()) ui_toast(&app, tr(S_DIAG_HINT));   // after the failure's own toast
         battery_learn_tick(&app);
         {   // USB / FTP screens: screen off after a minute without a press (listening mode has its own)
             static int idle_blanked;
@@ -882,8 +987,10 @@ int main(int argc, char *argv[]) {
         {   // XMB power saving: backlight auto-off and auto sleep (not while music / FTP / USB run)
             static int ps_blanked;
             // A battery test keeps the screen on and never sleeps (it measures until the battery is empty).
-            int busy = music_playing(&app) || app.ftp.phase != FTP_OFF || usb_active() || battery_running(&app);
-            int own = network_fullscreen(&app) || app.listening || battery_running(&app);
+            int busy = music_playing(&app) || app.ftp.phase != FTP_OFF || usb_active() || battery_running(&app) ||
+                       video_win_playing(&app) || cam_win_is_open(&app);
+            int own = network_fullscreen(&app) || app.listening || battery_running(&app) || video_win_playing(&app) ||
+                      cam_win_is_open(&app);
             PowerSaveOut ps = powersave_update(&app.psave, app.now_ms, app.backlight_s, app.sleep_s, busy, own);
             // A screen that owns the display (USB/FTP/listening) opening while we blanked: light it first.
             if (ps.screen_off != ps_blanked) power_set_screen(!ps.screen_off);
@@ -910,16 +1017,17 @@ int main(int argc, char *argv[]) {
                         (unsigned)app.now_ms, (unsigned)app.card_opened_ms,
                         (unsigned)(app.now_ms - app.card_opened_ms), (unsigned)app.toast_until,
                         app.now_ms < app.toast_until);
-            if (frames < 50) log_msg("perf: %d fps (tab=%d depth=%d)", frames, app.nav.tab, app.nav.depth);
             app.fps = frames;
             frames = 0;
             fps_start = app.now_ms;
             app.cpu_mhz = scePowerGetCpuClockFrequency();
             platform_memory(&app.ram_free, &app.ram_total);
+            perflog_second(&app, app.fps);   // per-visit min fps; a "perf:" line with the screen when < 50
             if (app.now_ms - perf_log_at >= 60000) {   // always in the log, whatever the debug box shows
                 perf_log_at = app.now_ms;
-                log_msg("perf: fps=%d cpu=%dMHz load=%d%% ram_free=%uKB ram_total=%uKB", app.fps, app.cpu_mhz,
-                        perfstat_load(&app.perf), (unsigned)(app.ram_free / 1024), (unsigned)(app.ram_total / 1024));
+                log_msg("perf: fps=%d cpu=%dMHz load=%d%% ram_free=%uKB ram_total=%uKB on %s", app.fps, app.cpu_mhz,
+                        perfstat_load(&app.perf), (unsigned)(app.ram_free / 1024), (unsigned)(app.ram_total / 1024),
+                        perflog_screen());
             }
         }
     }

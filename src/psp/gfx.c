@@ -7,6 +7,7 @@
 #include "utf8.h"
 #include "ccdraw.h"
 #include "platform.h"
+#include "batcells.h"
 
 extern const unsigned char font_regular[], font_semibold[];
 extern const unsigned int font_regular_size, font_semibold_size;
@@ -89,6 +90,7 @@ int gfx_init(void) {
     fonts[FONT_TITLE] = open_font(font_semibold, font_semibold_size, 20);
     fonts[FONT_BOLD] = open_font(font_semibold, font_semibold_size, 13);
     fonts[FONT_TINY] = open_font(font_regular, font_regular_size, 9);
+    fonts[FONT_SUB] = open_font(font_semibold, font_semibold_size, 16);
     for (int i = 0; i < FONT_COUNT; i++) {
         if (!fonts[i]) return -1;
         TTF_SetFontHinting(fonts[i], TTF_HINTING_LIGHT);
@@ -213,6 +215,35 @@ int gfx_text_width(FontId f, const char *utf8) {
 }
 
 int gfx_text_height(FontId f) { return TTF_FontHeight(fonts[f]); }
+
+static int sub_px = 16;
+
+void gfx_sub_font_size(int px) {
+    if (px == sub_px || px < 8 || px > 40) return;
+    TTF_Font *f = open_font(font_semibold, font_semibold_size, px);
+    if (!f) return;
+    TTF_SetFontHinting(f, TTF_HINTING_LIGHT);
+    TTF_CloseFont(fonts[FONT_SUB]);
+    fonts[FONT_SUB] = f;
+    sub_px = px;
+    for (int i = 0; i < TEXT_CACHE; i++)   // texts of the old size
+        if (cache[i].tex && cache[i].font == FONT_SUB) { SDL_DestroyTexture(cache[i].tex); cache[i].tex = NULL; cache[i].hash = 0; }
+    for (int i = 0; i < WIDTH_CACHE; i++) if (widths[i].font == FONT_SUB) widths[i].hash = 0;
+    for (int i = 0; i < FIT_CACHE; i++) if (fits[i].font == FONT_SUB) fits[i].hash = 0;
+}
+
+SDL_Texture *gfx_text_texture(FontId f, uint32_t rgba, const char *utf8, int *w, int *h) {
+    *w = *h = 0;
+    if (!utf8 || !*utf8) return NULL;
+    SDL_Color col = { R(rgba), G(rgba), B(rgba), A(rgba) };
+    SDL_Surface *s = TTF_RenderUTF8_Blended(fonts[f], utf8, col);
+    if (!s) return NULL;
+    SDL_Texture *t = texture_from_surface(s);
+    *w = s->w;
+    *h = s->h;
+    SDL_FreeSurface(s);
+    return t;
+}
 
 void gfx_text_fit(FontId f, int x, int y, int max_w, uint32_t rgba, const char *utf8) {
     if (!utf8 || !*utf8) return;
@@ -428,12 +459,18 @@ void gfx_button_glyph(Glyph g, int cx, int cy, int size) {
 int gfx_status_icon(StatusIcon icon, int x, int y, int value, int charging) {
     switch (icon) {
     case ICON_BATTERY: {
-        uint32_t col = value <= 15 && !charging ? 0xff6f7dff : COL_TEXT;
-        rectangleRGBA(renderer, x, y, x + 15, y + 7, 0x9f, 0xb0, 0xc4, 255);
-        gfx_rect(x + 16, y + 2, 2, 4, 0x9fb0c4ff);
-        int fill = value < 0 ? 0 : value > 100 ? 13 : value * 13 / 100;
-        gfx_rect(x + 1, y + 1, fill + (fill > 0), 6, charging ? 0x5fe0b0ff : col);
-        return 19;
+        // 1.3.12: four cells of 25 % (src/core/batcells.c); while charging the cell of the level blinks.
+        static const uint32_t COLS[4] = { COL_TEXT, 0x8c9bb0ff, 0x5fe0b0ff, 0xff6f7dff };   // BatCellCol order
+        BatCells c;
+        batcells(value, charging, (SDL_GetTicks() / BATCELL_BLINK_MS) % 2 == 0, &c);
+        gfx_round_rect_outline(x, y, BAT_ICON_BODY, 8, 2, 0x9fb0c4ff);
+        gfx_round_rect(x + BAT_ICON_BODY, y + 2, 2, 4, 1, 0x9fb0c4ff);
+        for (int i = 0; i < BATCELLS; i++) {
+            int cx = x + 2 + i * 4;               // 3 px cells, 1 px apart
+            if (i < c.solid) gfx_round_rect(cx, y + 2, 3, 4, 1, COLS[c.solid_col]);
+            else if (i == c.blink) gfx_round_rect(cx, y + 2, 3, 4, 1, COLS[c.blink_col]);
+        }
+        return BAT_ICON_W;
     }
     case ICON_WIFI: {
         // value: 0 switch off (dim), 1 on, 3 connected (accent).
@@ -443,6 +480,15 @@ int gfx_status_icon(StatusIcon icon, int x, int y, int value, int charging) {
         arcRGBA(renderer, x + 6, y + 8, 4, 225, 315, r, gg, b, a);
         arcRGBA(renderer, x + 6, y + 8, 7, 225, 315, r, gg, b, a);
         return 13;
+    }
+    case ICON_BT: {   // the Bluetooth rune, 7x11: a stem and two arrowheads to the right
+        uint8_t r = 0x6f, gg = 0xb0, b = 0xff;
+        lineRGBA(renderer, x + 3, y, x + 3, y + 10, r, gg, b, 255);
+        lineRGBA(renderer, x + 3, y, x + 6, y + 3, r, gg, b, 255);
+        lineRGBA(renderer, x + 6, y + 3, x, y + 8, r, gg, b, 255);
+        lineRGBA(renderer, x + 3, y + 10, x + 6, y + 7, r, gg, b, 255);
+        lineRGBA(renderer, x + 6, y + 7, x, y + 2, r, gg, b, 255);
+        return 7;
     }
     case ICON_NOTE:
         gfx_button_glyph(GLYPH_NOTE, x + 5, y + 4, 10);

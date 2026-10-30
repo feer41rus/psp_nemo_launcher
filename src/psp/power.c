@@ -17,6 +17,7 @@ static void *display_disable, *display_enable;   // sceDisplay_driver (kernel)
 static int power_callback(int unknown, int arg, void *common) {
     (void)unknown;
     (void)common;
+    log_dbg("power: callback %08x", (unsigned)arg);
     last_arg = (unsigned)arg;
     if (arg & PSP_POWER_CB_SUSPENDING) {
         // Hold the suspend (up to 1 s) until the main thread saved the music position.

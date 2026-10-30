@@ -126,7 +126,7 @@ static void restore(App *a) {
     int rc = sceIoRename(vboot, ark);
     if (rc >= 0) rc = platform_copy_file(run_path, vboot);
     log_msg("guard: restore Nemo rc=%d", rc);
-    if (rc < 0) { ui_toast(a, tr(S_RX_FAIL)); a->rx_stage = 0; return; }
+    if (rc < 0) { ui_fail(a, S_RX_FAIL); a->rx_stage = 0; return; }
     if (platform_file_size(NEMO_ARK_BACKUP) > 0) { a->rx_stage = 2; a->rx_yes = 1; }
     else { a->rx_stage = 0; ui_toast(a, tr(S_RX_DONE)); }
 }

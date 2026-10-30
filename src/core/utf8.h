@@ -13,4 +13,13 @@ size_t utf8_prev(const char *s, size_t pos);
 // Case-insensitive comparison of UTF-8 strings: folds ASCII and Cyrillic (incl. Ё/ё).
 int utf8_casecmp(const char *a, const char *b);
 
+// Codepoints in s (FAT names allow 255 of them, whatever their bytes).
+size_t utf8_len(const char *s);
+
+// Bytes of the codepoint at s (0 at the end of the string).
+size_t utf8_next(const char *s);
+
+// Byte index of the first case-insensitive match of needle in hay (folding as above), -1 if none or empty.
+int utf8_casefind(const char *hay, const char *needle);
+
 #endif

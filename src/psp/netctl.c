@@ -1,10 +1,12 @@
 #include "ui.h"
+#include "photo_hw.h"
 #include "device.h"
 #include "log.h"
 #include "platform.h"
 #include "art.h"
 #include "launch.h"
 #include "usb.h"
+#include "bt_hw.h"
 #include <SDL2/SDL.h>
 #include <stdio.h>
 #include <string.h>
@@ -13,14 +15,27 @@
 
 void network_init(App *a) {
     a->has_wifi = device_has_wifi(platform_model());
-    netnav_init(&a->netnav, a->has_wifi);
+    netnav_init(&a->netnav, a->has_wifi, platform_model() == 4);
     a->net_screen = NETS_MAIN;
     a->wpa2_on = a->has_wifi ? platform_ark_get("wpa2", 1) : 0;
 }
 
 static int wifi_section(const App *a) { return netnav_current(&a->netnav) == NS_WIFI; }
 
+// PSP Go Bluetooth (1.3.12): the registry every 10 s; a change goes to the detailed log.
+static void bt_tick(App *a) {
+    if (platform_model() != 4 || usb_active()) return;
+    if (a->bt_at && a->now_ms - a->bt_at < 10000) return;
+    BtState was = a->bt;
+    bt_refresh(&a->bt, 0);
+    if (!a->bt_at || memcmp(&was, &a->bt, sizeof was) != 0) {
+        if (log_verbose) bt_log_state(a->bt_at ? "changed" : "first read", &a->bt);
+    }
+    a->bt_at = a->now_ms ? a->now_ms : 1;
+}
+
 void network_tick(App *a) {
+    bt_tick(a);
     if (!a->has_wifi) return;
     if (a->nav.tab == TAB_NETWORK && !net_started()) net_start();   // modules load on first visit
     net_snapshot(&a->net);
@@ -124,8 +139,11 @@ static void toggle_ftp(App *a) {
 static void usb_open(App *a) {
     if (a->music_scan_state == 1) { ui_toast(a, tr(S_USB_WAIT_SCAN)); return; }   // that thread reads ms0:
     if (selfguard_busy()) { ui_toast(a, tr(S_USB_WAIT_BACKUP)); return; }
+    if (files_worker_busy()) { ui_toast(a, tr(S_FM_USB_WAIT)); return; }   // 1.3.2: copying on the card
     media_suspend(a);                         // last write: the music state (synchronous)
     for (int i = 0; i < 300 && art_busy(); i++) SDL_Delay(10);   // an artwork cache write in flight
+    photo_thumbs_pause(1);                    // 1.3.1: a photo thumbnail being cached must land first
+    for (int i = 0; i < 300 && photo_thumbs_busy(); i++) { photo_thumbs_stop(); SDL_Delay(10); }
     selfguard_clean_exit();                   // the restart after USB is not a failed start
     log_msg("usb: on");
     platform_sync_card();                     // logged; the second one also flushes the closed log
@@ -134,7 +152,7 @@ static void usb_open(App *a) {
     if (usb_enter() != 0) {
         log_resume();
         media_resume(a);
-        ui_toast(a, tr(S_USB_FAILED));
+        ui_fail(a, S_USB_FAILED);
         return;
     }
     a->net_screen = NETS_USB;

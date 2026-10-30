@@ -177,6 +177,7 @@ static int scan_thread(SceSize args, void *argp) {
         cur_dir[0] = '\0';
         sceKernelSignalSema(lock, 1);
         const MemTotals *d = &done[slot];
+        log_msg("time: memory_count %u ms", (unsigned)(platform_ms() - t0));
         log_msg("mem: scan %s %u ms, %ld files, iso=%lld game=%lld dlc=%lld save=%lld music=%lld photo=%lld video=%lld "
                 "sys=%lld other=%lld", dev, (unsigned)(platform_ms() - t0), d->files, d->bytes[MC_ISO],
                 d->bytes[MC_GAME], d->bytes[MC_DLC], d->bytes[MC_SAVE], d->bytes[MC_MUSIC],

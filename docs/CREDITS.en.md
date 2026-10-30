@@ -47,4 +47,12 @@ Thanks to the projects Nemo Launcher is built on or learned from.
 - **SDL2, SDL2_mixer, SDL2_ttf, SDL2_image** — https://github.com/libsdl-org (zlib) — graphics, sound, fonts, images.
 - **SDL2_gfx** — https://www.ferzkopp.net/wordpress/2016/01/02/sdl_gfx-sdl2_gfx/ (zlib) — primitives (rounded rectangles, circles).
 - **cJSON** — https://github.com/DaveGamble/cJSON (MIT) — JSON for Nemo's data.
+- **libjpeg-turbo** — https://github.com/libjpeg-turbo/libjpeg-turbo (IJG + BSD-3-Clause + zlib) — Photos: fast scaled JPEG decoding, lossless rotation, row-by-row writing of large photos.
+- **libpng** — http://www.libpng.org/pub/png/libpng.html (libpng license) — Photos: row-by-row PNG reading and writing when rotating large photos.
+- **PMP Mod AVC — avc.c** (Sorin P. C. "magiK", copy in openTri) — https://github.com/albe/openTri/blob/main/src/pmp/avc.c (GPL-2.0-or-later) — Video: how to feed H.264 frames to the PSP's hardware decoder (`sceMpegAvcDecode`, copying the frame into the Media Engine).
+- **cooleyes — avcdecoder sample (PMPlayer Advance)** — https://archive.org/details/avcdecoder-3xx.-7z (GPL-2.0-or-later) — Video: the call order for H.264 in MP4 through `mpeg_vsh` (`sceMpegGetAvcNalAu`, `sceMpegAvcDecodeDetail2`, `sceMpegBaseCscAvc`), their NIDs, the Media Engine modes.
+- **PPSSPP** — https://github.com/hrydgard/ppsspp (GPL-2.0-or-later) — a reference for how `sceMpeg`/`sceJpeg` behave, and the finding that the XMB boots the Media Engine in mode 3 (`sceMeBootStart`, PR #22768).
+- **LightMP3** (Sakya et al.) — https://wololo.net/talk/viewtopic.php?t=48108 (GPL) — the `sceMeBootStart` NID for 6.60/6.61 (`0x5DFF5C50`).
 - **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — the interface font (cut down to Latin and Cyrillic).
+- **Pillow** — https://github.com/python-pillow/Pillow (MIT-CMU) and **NumPy** — https://github.com/numpy/numpy (BSD-3-Clause) — the Library background generator (`tools/make_library_bgs.py`): drawing, glow, the matte coat.
+- **Mr. Nobody (directed by Jaco Van Dormael, 2009)** — the idea behind the name Nemo and the meaning of the Library backgrounds: choice, possibility, other paths. Nemo contains no frames from the film.

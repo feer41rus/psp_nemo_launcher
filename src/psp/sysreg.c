@@ -2,6 +2,7 @@
 #include <pspreg.h>
 #include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <strings.h>
 #include "log.h"
@@ -91,6 +92,78 @@ static void dump_dir(REGHANDLE reg, const char *dir, int depth) {
         }
     }
     sceRegCloseCategory(cat);
+}
+
+// 1.3.12: every key under dir (recursive, depth <= 5), sub-categories included, passed to cb. Unlike the dump
+// it enters /CONFIG/NETWORK too (Bluetooth tethering may live there); values of secret-looking keys are not read.
+static int secret(const char *name) {
+    static const char *const W[] = { "pass", "key", "link", "pin", "wep", "wpa", "psk" };
+    for (const char *p = name; *p; p++)
+        for (unsigned i = 0; i < sizeof W / sizeof *W; i++)
+            if (strncasecmp(p, W[i], strlen(W[i])) == 0) return 1;
+    return 0;
+}
+
+static void walk_dir(REGHANDLE reg, const char *dir, int depth, SysregWalkFn cb, void *ctx) {
+    if (depth > 5) return;
+    REGHANDLE cat;
+    if (sceRegOpenCategory(reg, dir, 2, &cat) < 0) return;
+    int num = 0;
+    sceRegGetKeysNum(cat, &num);
+    if (num > 96) num = 96;
+    static char names[96 * 27];
+    char *local = num > 0 ? malloc((size_t)num * 27) : NULL;
+    if (local && sceRegGetKeys(cat, names, num) >= 0) memcpy(local, names, (size_t)num * 27);
+    else num = 0;
+    for (int i = 0; i < num; i++) {
+        const char *name = local + i * 27;
+        REGHANDLE k;
+        unsigned int type = 0;
+        SceSize size = 0;
+        if (sceRegGetKeyInfo(cat, name, &k, &type, &size) < 0) continue;
+        char path[160];
+        snprintf(path, sizeof path, "%s/%s", dir, name);
+        SysregItem it;
+        memset(&it, 0, sizeof it);
+        it.path = path;
+        it.size = (int)size;
+        it.hidden = secret(name);
+        if (type == REG_TYPE_DIR) {
+            it.kind = SYSREG_DIR;
+            cb(ctx, &it);
+            walk_dir(reg, path, depth + 1, cb, ctx);
+            continue;
+        }
+        if (type == REG_TYPE_INT) {
+            unsigned int v = 0;
+            it.kind = SYSREG_INT;
+            if (!it.hidden) sceRegGetKeyValue(cat, k, &v, sizeof v);
+            it.ival = (int)v;
+        } else if (type == REG_TYPE_STR) {
+            it.kind = SYSREG_STR;
+            if (!it.hidden) sceRegGetKeyValue(cat, k, it.sval, size < sizeof it.sval ? size : sizeof it.sval - 1);
+        } else {
+            it.kind = SYSREG_BIN;
+            if (!it.hidden) sceRegGetKeyValue(cat, k, it.bin, size < sizeof it.bin ? size : sizeof it.bin);
+        }
+        cb(ctx, &it);
+    }
+    free(local);
+    sceRegCloseCategory(cat);
+}
+
+void sysreg_walk(const char *dir, SysregWalkFn cb, void *ctx) {
+    struct RegParam param;
+    REGHANDLE reg;
+    memset(&param, 0, sizeof param);
+    param.regtype = 1;
+    strcpy(param.name, "/system");
+    param.namelen = strlen(param.name);
+    param.unk2 = 1;
+    param.unk3 = 1;
+    if (sceRegOpenRegistry(&param, 2, &reg) < 0) { log_msg("reg: open failed"); return; }
+    walk_dir(reg, dir, 0, cb, ctx);
+    sceRegCloseRegistry(reg);
 }
 
 void sysreg_dump(const char *dir) {

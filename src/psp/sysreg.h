@@ -11,6 +11,19 @@ int sysreg_set_str(const char *dir, const char *key, const char *value);
 // Spike 1.1.5: log every key under dir (recursive), skipping passwords and the network profiles.
 void sysreg_dump(const char *dir);
 
+// 1.3.12: every key under dir, recursively (sub-categories as SYSREG_DIR). Secret-looking keys (pass, key,
+// link, pin, wep, wpa, psk) come with hidden = 1 and no value.
+typedef enum { SYSREG_DIR, SYSREG_INT, SYSREG_STR, SYSREG_BIN } SysregKind;
+typedef struct {
+    const char *path;
+    SysregKind kind;
+    int hidden, size, ival;
+    char sval[64];
+    unsigned char bin[16];   // the first bytes of a binary value
+} SysregItem;
+typedef void (*SysregWalkFn)(void *ctx, const SysregItem *it);
+void sysreg_walk(const char *dir, SysregWalkFn cb, void *ctx);
+
 int sysreg_get_confirm_cross(void);
 int sysreg_set_confirm_cross(int cross);
 

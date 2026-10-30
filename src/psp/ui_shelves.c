@@ -1,6 +1,7 @@
 #include "ui.h"
 #include "art.h"
 #include "gfx.h"
+#include "libbg_hw.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -98,18 +99,37 @@ static void draw_home_background(App *app) {
     if (bg) gfx_texture_cover(bg, 0, CONTENT_Y, SCREEN_W, CONTENT_H, 255);
     else gfx_gradient_v(0, CONTENT_Y, SCREEN_W, CONTENT_H, ui_game_color(g, 0), COL_BG);
     // Readability: soft shade behind the banner text, lighter one under the shelves.
-    gfx_gradient_h(0, CONTENT_Y, 260, BANNER_H - CONTENT_Y, 0x0e131ba0, 0x0e131b00);
+    // The banner shade fades out downwards (below the Play button) instead of ending in a hard line.
+    // One texture made once: 40 one-row gradients thrashed the 24-entry gradient cache every frame
+    // (Home fell to ~34 fps and the low-priority artwork thread starved, 1.3.1 console log).
+    const int fade_y = BANNER_H - 28, fade_h = 40;
+    gfx_gradient_h(0, CONTENT_Y, 260, fade_y - CONTENT_Y, 0x0e131ba0, 0x0e131b00);
+    static SDL_Texture *fade;
+    if (!fade) {
+        SDL_Surface *s = SDL_CreateRGBSurfaceWithFormat(0, 260, fade_h, 32, SDL_PIXELFORMAT_RGBA8888);
+        if (s) {
+            for (int y = 0; y < fade_h; y++)
+                for (int x = 0; x < 260; x++) {
+                    uint32_t a = 0xa0u * (uint32_t)(fade_h - y) / (uint32_t)(fade_h + 1) * (uint32_t)(259 - x) / 259u;
+                    ((uint32_t *)((uint8_t *)s->pixels + y * s->pitch))[x] = 0x0e131b00u | a;
+                }
+            fade = gfx_texture_from_surface(s);
+            if (fade) SDL_SetTextureBlendMode(fade, SDL_BLENDMODE_BLEND);
+            SDL_FreeSurface(s);
+        }
+    }
+    if (fade) gfx_texture(fade, 0, fade_y, 260, fade_h, 255);
     gfx_gradient_v(0, BANNER_H, SCREEN_W, SCREEN_H - HINT_BAR_H - BANNER_H, 0x0e131b00, 0x0e131b70);
 }
 
-static void draw_banner(App *app, int y) {
+static void draw_banner(App *app, int y, int right) {
     int game = app->continue_game;
     const Game *g = &app->games.items[game];
     int focused = app->nav.depth == 0 && app->nav.shelf[TAB_HOME] == -1;
 
     int x = LEFT, ty = y + 34;
     gfx_text(FONT_SMALL, x, ty, 0xffcf9fff, tr(S_CONTINUE));
-    gfx_text_fit(FONT_TITLE, x, ty + 14, SCREEN_W - 2 * LEFT, COL_TEXT, g->title);
+    gfx_text_fit(FONT_TITLE, x, ty + 14, right - 8 - x, COL_TEXT, g->title);   // clear of the low-space badge
     char sub[96];
     int disc = library_last_disc(app->lib, g->id);
     if (g->disc_count > 1 && disc > 0) {
@@ -137,15 +157,19 @@ static void draw_empty(void) {
 }
 
 // Home before any game was launched: invite to play (the shelves below list the games by type).
-static void draw_first_run(int y) {
-    gfx_text(FONT_TITLE, LEFT, y, COL_TEXT, tr(S_HOME_FIRST));
-    gfx_text_fit(FONT_SMALL, LEFT, y + 26, SCREEN_W - 2 * LEFT, COL_MUTED, tr(S_HOME_FIRST_HINT));
+static void draw_first_run(int y, int right) {
+    gfx_text_fit(FONT_TITLE, LEFT, y, right - 8 - LEFT, COL_TEXT, tr(S_HOME_FIRST));
+    gfx_text_fit(FONT_SMALL, LEFT, y + 26, right - 8 - LEFT, COL_MUTED, tr(S_HOME_FIRST_HINT));
 }
 
 void ui_shelves_draw(App *app, Tab tab) {
     int count;
     const Shelf *shelves = shelves_of(app, tab, &count);
     int banner = tab == TAB_HOME && app->continue_game >= 0;
+    if (tab == TAB_LIBRARY) {   // 1.3.8: the chosen background under a matte coat (Settings › Nemo)
+        SDL_Texture *bg = libbg_texture(app->lib->settings.lib_bg);
+        if (bg) gfx_texture(bg, 0, 0, SCREEN_W, SCREEN_H, 255);
+    }
     if (count == 0 && !banner) { draw_empty(); return; }
     int first_run = tab == TAB_HOME && !banner;
 
@@ -165,11 +189,12 @@ void ui_shelves_draw(App *app, Tab tab) {
     app->scroll_y[tab] = ease(app->scroll_y[tab], target);
     int sy = (int)app->scroll_y[tab];
 
+    int badge_x = tab == TAB_HOME && app->nav.depth == 0 ? lowspace_badge_x(app) : SCREEN_W;   // 1.3.10
     if (banner) {
         draw_home_background(app);
-        draw_banner(app, -sy);
+        draw_banner(app, -sy, sy < 60 ? badge_x : SCREEN_W);
     }
-    if (first_run) draw_first_run(VIEW_TOP + 8 - sy);
+    if (first_run) draw_first_run(VIEW_TOP + 8 - sy, sy < 60 ? badge_x : SCREEN_W);
 
     for (int s = 0; s < count; s++) {
         int y = base + s * SHELF_H - sy;
@@ -212,4 +237,15 @@ void ui_shelves_draw(App *app, Tab tab) {
             draw_tile(app, sh->games[t], LEFT + t * (TILE_W + TILE_GAP) - sx, ty, 1);
         }
     }
+    if (badge_x < SCREEN_W) lowspace_draw(app);   // over the shelves' artwork, under the tab bar
+}
+
+// Photos window closed (1.3.1): ask for the artwork a tab shows first — the "Continue" background and
+// the first tiles of its first shelves — so it is ready before the tab is opened.
+void shelves_preload(App *app, Tab tab) {
+    int count;
+    const Shelf *shelves = shelves_of(app, tab, &count);
+    if (tab == TAB_HOME && app->continue_game >= 0) art_background(app->continue_game);
+    for (int s = 0; s < count && s < 3; s++)
+        for (int t = 0; t < shelves[s].count && t < 6; t++) art_icon(shelves[s].games[t]);
 }

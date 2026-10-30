@@ -10,13 +10,13 @@ CORE_OBJS = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/src/core/*.c))
 PSP_OBJS  = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/src/psp/*.c)) \
             $(patsubst $(ROOT)/%.S,%.o,$(wildcard $(ROOT)/src/psp/*.S))
 FTP_OBJS  = $(patsubst $(ROOT)/%.c,%.o,$(wildcard $(ROOT)/third_party/libpspftp/src/*.c))
-OBJS = $(CORE_OBJS) $(PSP_OBJS) $(FTP_OBJS) third_party/cjson/cJSON.o gen/font_regular.o gen/font_semibold.o gen/ncl_logo.o gen/nemo_logo.o gen/splash_c.o gen/splash_ncl.o gen/testers_txt.o gen/changelog_ru.o gen/changelog_en.o gen/credits_ru.o gen/credits_en.o
+OBJS = $(CORE_OBJS) $(PSP_OBJS) $(FTP_OBJS) third_party/cjson/cJSON.o gen/font_regular.o gen/font_semibold.o gen/ncl_logo.o gen/nemo_logo.o gen/splash_c.o gen/splash_ncl.o gen/bg_branches.o gen/bg_rails.o gen/bg_three_lives.o gen/bg_particles.o gen/bg_mars.o gen/bg_grid.o gen/testers_txt.o gen/changelog_ru.o gen/changelog_en.o gen/credits_ru.o gen/credits_en.o
 
 SDL_PKGS = sdl2 SDL2_ttf SDL2_image SDL2_gfx SDL2_mixer
 INCDIR = $(ROOT)/src/core $(ROOT)/src/psp $(ROOT)/third_party/cjson $(ROOT)/third_party/dr_libs $(ROOT)/third_party/libpspftp/include
 CFLAGS = -O2 -G0 -Wall -Wno-unused-parameter -std=gnu11 -MMD -MP $(shell psp-pkg-config --cflags $(SDL_PKGS))
-LIBS = $(filter-out -lSDL2main -pthread,$(shell psp-pkg-config --libs $(SDL_PKGS))) \
-       -lpspsystemctrl_user -lpspkubridge -larkctrl -lpsphprm -lpspreg -lpsprtc -lpspwlan -lpsppower -lpspmp3 -lpspumd
+LIBS = -lturbojpeg $(filter-out -lSDL2main -pthread,$(shell psp-pkg-config --libs $(SDL_PKGS))) -ljpeg -lpng -lz \
+       -lpspsystemctrl_user -lpspkubridge -larkctrl -lpsphprm -lpspreg -lpsprtc -lpspwlan -lpsppower -lpspmp3 -lpspumd -lpspaudiocodec -lpspjpeg -lpspusbcam -lpspusb
 
 BUILD_PRX = 1
 PSP_FW_VERSION = 660

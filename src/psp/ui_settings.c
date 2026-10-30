@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "utf8.h"
 #include "gfx.h"
 #include "launch.h"
 #include "platform.h"
@@ -16,6 +17,8 @@
 #include "device.h"
 #include "logrot.h"
 #include "battery_hw.h"
+#include "libbg.h"
+#include "libbg_hw.h"
 
 #define ROW_H 28
 #define VISIBLE_ROWS 7          // author: smaller version line, one more row
@@ -96,7 +99,7 @@ static void zone_text(int minutes, char *out, size_t cap) {
 static int set_reg_in(App *a, const char *dir, const char *key, int value) {
     int rc = sysreg_set_int(dir, key, value);
     log_msg("settings: %s=%d rc=%d", key, value, rc);
-    if (rc != 0) ui_toast(a, tr(S_ST_REG_FAILED));
+    if (rc != 0) ui_fail(a, S_ST_REG_FAILED);
     return rc;
 }
 
@@ -107,38 +110,24 @@ static int brightness_now(void) {
     return b >= 0 && b <= 3 ? b : 0;
 }
 
-static void step_choice(App *a, const int *choices, int n, int *value, const char *key, int delta) {
-    int i = (powersave_choice_index(choices, n, *value) + delta + n) % n;
-    if (set_reg_in(a, PS_DIR, key, choices[i]) == 0) {
-        *value = choices[i];
-        powersave_reset(&a->psave, a->now_ms);
-    }
-}
-
 static void change_ark(App *a, SetId id, int delta);
+static int pick_count(SetId id);
 static int pick_current(const App *a, SetId id);
+static int pick_needs_ark(SetId id);
 static void pick_apply(App *a, SetId id, int i);
 
 static void change(App *a, SetId id, int delta) {
-    switch (id) {
-    case SID_DATE_FORMAT: {
-        int next = (a->date_format + delta + 3) % 3;
-        if (set_reg(a, "date_format", next) == 0) a->date_format = next;
-        break;
+    log_dbg("settings: change %s (id %d, delta %d)", tr_en(setmenu_entry(id)->label), (int)id, delta);
+    if (setmenu_entry(id)->dropdown) {        // ←/→ on a drop-down row: the next value of the same list
+        if (pick_needs_ark(id) && !a->ark_text) { ui_fail(a, S_ST_ARK_READ_FAILED); return; }
+        int n = pick_count(id);
+        pick_apply(a, id, (pick_current(a, id) + delta + n) % n);
+        return;
     }
+    switch (id) {
     case SID_TIME_FORMAT:
         if (set_reg(a, "time_format", !a->time_h12) == 0) a->time_h12 = !a->time_h12;
         break;
-    case SID_LOG_KEEP:                        // ←/→ step through Off / 2 / 5 / 10 / 20, like the drop-down
-        pick_apply(a, id, (pick_current(a, id) + delta + LOG_KEEP_CHOICE_COUNT) % LOG_KEEP_CHOICE_COUNT);
-        break;
-    case SID_TIMEZONE: {
-        int i = zone_index(a->tz_minutes);
-        if (i < 0) i = 0;
-        else i = (i + delta + TIME_ZONE_COUNT) % TIME_ZONE_COUNT;
-        if (set_reg(a, "time_zone_offset", TIME_ZONES[i].minutes) == 0) a->tz_minutes = TIME_ZONES[i].minutes;
-        break;
-    }
     case SID_LANGUAGE: {                      // the system language: the XMB switches too
         int ru = i18n_get() != LANG_RU;
         if (set_reg_in(a, XMB_DIR, "language", ru ? LANG_REG_RU : LANG_REG_EN) == 0) {
@@ -147,17 +136,8 @@ static void change(App *a, SetId id, int delta) {
         }
         break;
     }
-    case SID_BRIGHTNESS: {
-        int b = (brightness_now() + delta + 4) % 4;
-        platform_impose_set(IMPOSE_BRIGHTNESS, b);
-        set_reg_in(a, SYS_DIR, "backlight_brightness", b);
-        break;
-    }
-    case SID_BACKLIGHT: step_choice(a, BACKLIGHT_CHOICES, 6, &a->backlight_s, "backlight_off_interval", delta); break;
-    case SID_AUTOSLEEP: step_choice(a, SLEEP_CHOICES, 7, &a->sleep_s, "suspend_interval", delta); break;
     case SID_WPA2: network_toggle_wpa2(a); break;
-    case SID_USBCHARGE: case SID_HIGHMEM: case SID_MSCACHE: case SID_INFERNO: case SID_SKIPLOGO: case SID_NOLED:
-    case SID_NOUMD: case SID_NOANALOG: case SID_UMDREGION: case SID_OC_GAMES: case SID_OC_XMB: case SID_OC_NEMO:
+    case SID_USBCHARGE: case SID_NOLED: case SID_NOUMD: case SID_NOANALOG:   // on/off ARK options step
         change_ark(a, id, delta);
         break;
     case SID_REPLACE_XMB: {
@@ -170,12 +150,14 @@ static void change(App *a, SetId id, int delta) {
         else if (s->replace_xmb) ui_toast(a, tr(S_RX_ON_NOTE));
         break;
     }
-    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC:
-    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: {
+    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_SHOW_PHOTO:
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: case SID_BAT_PCT: case SID_LOW_SPACE: {
         NemoSettings *s = &a->lib->settings;
         int *f = id == SID_SHOW_XMB_EXIT ? &s->xmb_exit : id == SID_NCL_LOGO ? &s->ncl_logo : id == SID_SITE ? &s->site
+                 : id == SID_BAT_PCT ? &s->bat_pct : id == SID_LOW_SPACE ? &s->low_space
                  : id == SID_SPLASH_HELLO ? &s->splash_hello : id == SID_SPLASH_NCL ? &s->splash_ncl
-                 : id == SID_UI_SOUNDS ? &s->ui_sounds : id == SID_CONTROL_CENTER ? &s->control_center : &s->show_music;
+                 : id == SID_UI_SOUNDS ? &s->ui_sounds : id == SID_CONTROL_CENTER ? &s->control_center
+                 : id == SID_SHOW_PHOTO ? &s->show_photo : &s->show_music;
         *f = !*f;
         library_save(a->lib, NEMO_DATA_PATH);
         log_msg("settings: nemo %d=%d", id, *f);
@@ -186,6 +168,14 @@ static void change(App *a, SetId id, int delta) {
             ui_toast(a, tr(S_ST_CC_NOTE));
         }
         a->setmenu.show_site = s->site;
+        break;
+    }
+    case SID_VERBOSE_LOG: {   // the detailed log for beta testing (1.3.3): on at once, and on from the next start
+        NemoSettings *s = &a->lib->settings;
+        s->verbose_log = !s->verbose_log;
+        library_save(a->lib, NEMO_DATA_PATH);
+        log_set_verbose(s->verbose_log);
+        if (s->verbose_log) diag_passport(a);
         break;
     }
     case SID_DBG_RAM: case SID_DBG_CPU: case SID_DBG_FPS: {   // debug box rows (1.2.0)
@@ -235,7 +225,7 @@ static void ark_commit(App *a, char *next, const char *what) {
     log_msg("settings: ark %s rc=%d", what, rc);
     if (rc != 0) {
         free(next);
-        ui_toast(a, tr(S_ST_REG_FAILED));
+        ui_fail(a, S_ST_REG_FAILED);
         return;
     }
     free(a->ark_text);
@@ -252,18 +242,14 @@ static int clock_index(const App *a, SetId id) {
 static void set_clock(App *a, SetId id, int index);
 
 static void change_ark(App *a, SetId id, int delta) {
-    if (!a->ark_text) { ui_toast(a, tr(S_ST_ARK_READ_FAILED)); return; }
+    if (!a->ark_text) { ui_fail(a, S_ST_ARK_READ_FAILED); return; }
     const ArkOpt *o = ark_opt(id);
     if (o) {
         int c = (arkopt_get(a->ark_text, o) + delta + o->count) % o->count;
         char what[48];
         snprintf(what, sizeof what, "%s=%d", o->family, c);
         ark_commit(a, arkopt_set(a->ark_text, o, c), what);
-        return;
     }
-    int t = clock_target(id);
-    if (t < 0) return;
-    set_clock(a, id, (clock_index(a, id) + delta + 8) % 8);
 }
 
 static void set_clock(App *a, SetId id, int index) {
@@ -276,43 +262,135 @@ static void set_clock(App *a, SetId id, int index) {
     if (t == CLK_LAUNCHER && mhz > 333) ui_toast(a, tr(S_ST_OC_NEMO_NOTE));
 }
 
-// Drop-down lists (SC_PICK): overclock clocks, time zones and log retention.
+// Drop-down lists (SC_PICK): every setting with more than two values (author, 1.3.8); ←/→ on the row step
+// through the same list.
 #define PICK_ROWS 9
 
 static int pick_count(SetId id) {
-    return id == SID_TIMEZONE ? TIME_ZONE_COUNT : id == SID_LOG_KEEP ? LOG_KEEP_CHOICE_COUNT : 8;
+    const ArkOpt *o = ark_opt(id);
+    if (o) return o->count;
+    switch (id) {
+    case SID_TIMEZONE: return TIME_ZONE_COUNT;
+    case SID_LOG_KEEP: return LOG_KEEP_CHOICE_COUNT;
+    case SID_LIB_BG: return LIBBG_COUNT;
+    case SID_DATE_FORMAT: return 3;
+    case SID_BRIGHTNESS: return 4;
+    case SID_BACKLIGHT: return 6;
+    case SID_AUTOSLEEP: return 7;
+    default: return 8;                        // overclock: ARK_CLOCKS
+    }
 }
 
 static int pick_current(const App *a, SetId id) {
-    if (id == SID_LOG_KEEP) {
+    const ArkOpt *o = ark_opt(id);
+    if (o) return a->ark_text ? arkopt_get(a->ark_text, o) : 0;
+    switch (id) {
+    case SID_LOG_KEEP:
         for (int i = 0; i < LOG_KEEP_CHOICE_COUNT; i++)
             if (LOG_KEEP_CHOICES[i] == a->lib->settings.log_keep) return i;
         return 0;
+    case SID_TIMEZONE: {
+        int i = zone_index(a->tz_minutes);
+        return i < 0 ? 0 : i;
     }
-    if (id != SID_TIMEZONE) return clock_index(a, id);
-    int i = zone_index(a->tz_minutes);
-    return i < 0 ? 0 : i;
+    case SID_LIB_BG: return libbg_valid(a->lib->settings.lib_bg);
+    case SID_DATE_FORMAT: return a->date_format;
+    case SID_BRIGHTNESS: return brightness_now();
+    case SID_BACKLIGHT: return powersave_choice_index(BACKLIGHT_CHOICES, 6, a->backlight_s);
+    case SID_AUTOSLEEP: return powersave_choice_index(SLEEP_CHOICES, 7, a->sleep_s);
+    default: return clock_index(a, id);
+    }
+}
+
+static void seconds_text(int s, char *out, size_t cap) {
+    if (s <= 0) snprintf(out, cap, "%s", tr(S_OFF));
+    else if (s < 60) snprintf(out, cap, tr(S_ST_SEC_FMT), s);
+    else snprintf(out, cap, tr(S_ST_MIN_FMT), s / 60);
 }
 
 static void pick_label(SetId id, int i, char *out, size_t cap) {
-    if (id == SID_TIMEZONE) zone_text(TIME_ZONES[i].minutes, out, cap);
-    else if (id == SID_LOG_KEEP && !LOG_KEEP_CHOICES[i]) snprintf(out, cap, "%s", tr(S_ST_V_OFF));
-    else if (id == SID_LOG_KEEP) snprintf(out, cap, "%d", LOG_KEEP_CHOICES[i]);
-    else if (!ARK_CLOCKS[i]) snprintf(out, cap, "%s", tr(S_ST_V_AUTO));
-    else snprintf(out, cap, tr(ARK_CLOCKS[i] > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), ARK_CLOCKS[i]);
+    static const StrId DF[3] = { S_ST_DF_YMD, S_ST_DF_MDY, S_ST_DF_DMY };
+    static const StrId HIGHMEM[5] = { S_ST_V_OFF, S_ST_V_DEFAULT, S_ST_V_AUTO, S_ST_V_16MB, 0 };
+    static const StrId SKIP[4] = { S_ST_V_OFF, S_ST_V_ON, S_ST_V_GAMEBOOT, S_ST_V_COLDBOOT };
+    static const StrId REGION[4] = { S_ST_V_DEFAULT, S_ST_V_US, S_ST_V_EU, S_ST_V_JP };
+    static const char *const MSC[4] = { NULL, "4 KiB", "8 KiB", "16 KiB" };
+    static const char *const INF[3] = { NULL, "LRU", "RR" };
+    switch (id) {
+    case SID_TIMEZONE: zone_text(TIME_ZONES[i].minutes, out, cap); return;
+    case SID_LOG_KEEP:
+        if (!LOG_KEEP_CHOICES[i]) snprintf(out, cap, "%s", tr(S_ST_V_OFF));
+        else snprintf(out, cap, "%d", LOG_KEEP_CHOICES[i]);
+        return;
+    case SID_LIB_BG: snprintf(out, cap, "%s", tr(libbg_name(i))); return;
+    case SID_DATE_FORMAT: snprintf(out, cap, "%s", tr(DF[i])); return;
+    case SID_BRIGHTNESS: snprintf(out, cap, tr(S_ST_LEVEL_FMT), i + 1); return;
+    case SID_BACKLIGHT: seconds_text(BACKLIGHT_CHOICES[i], out, cap); return;
+    case SID_AUTOSLEEP: seconds_text(SLEEP_CHOICES[i], out, cap); return;
+    case SID_HIGHMEM: snprintf(out, cap, "%s", i == 4 ? "MAX" : tr(HIGHMEM[i])); return;
+    case SID_SKIPLOGO: snprintf(out, cap, "%s", tr(SKIP[i])); return;
+    case SID_UMDREGION: snprintf(out, cap, "%s", tr(REGION[i])); return;
+    case SID_MSCACHE: snprintf(out, cap, "%s", i ? MSC[i] : tr(S_ST_V_OFF)); return;
+    case SID_INFERNO: snprintf(out, cap, "%s", i ? INF[i] : tr(S_ST_V_OFF)); return;
+    case SID_USBCHARGE: case SID_NOLED: case SID_NOUMD: case SID_NOANALOG:
+        snprintf(out, cap, "%s", tr(i ? S_ST_V_ON : S_ST_V_OFF));
+        return;
+    default:
+        if (!ARK_CLOCKS[i]) snprintf(out, cap, "%s", tr(S_ST_V_AUTO));
+        else snprintf(out, cap, tr(ARK_CLOCKS[i] > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), ARK_CLOCKS[i]);
+        return;
+    }
 }
+
+// The list needs ARK's settings file for ARK options and clocks.
+static int pick_needs_ark(SetId id) { return ark_opt(id) || clock_target(id) >= 0; }
 
 static void pick_apply(App *a, SetId id, int i) {
     if (i == pick_current(a, id)) return;
-    if (id == SID_LOG_KEEP) {                 // the new count applies from the next start; Off stops now
+    const ArkOpt *o = ark_opt(id);
+    if (o) {
+        if (!a->ark_text) return;
+        char what[48];
+        snprintf(what, sizeof what, "%s=%d", o->family, i);
+        ark_commit(a, arkopt_set(a->ark_text, o, i), what);
+        return;
+    }
+    switch (id) {
+    case SID_LOG_KEEP:                        // the new count applies from the next start; Off stops now
         a->lib->settings.log_keep = LOG_KEEP_CHOICES[i];
         library_save(a->lib, NEMO_DATA_PATH);
         log_msg("settings: log_keep=%d", LOG_KEEP_CHOICES[i]);
         if (!LOG_KEEP_CHOICES[i]) log_disable();
         return;
+    case SID_TIMEZONE:
+        if (set_reg(a, "time_zone_offset", TIME_ZONES[i].minutes) == 0) a->tz_minutes = TIME_ZONES[i].minutes;
+        return;
+    case SID_LIB_BG:                          // 1.3.8: "Your own" only once the Gallery has made one
+        if (i == LIBBG_OWN && !libbg_exists()) { ui_toast(a, tr(S_ST_LIB_BG_NONE)); return; }
+        a->lib->settings.lib_bg = i;
+        library_save(a->lib, NEMO_DATA_PATH);
+        log_msg("settings: lib_bg=%d", i);
+        return;
+    case SID_DATE_FORMAT:
+        if (set_reg(a, "date_format", i) == 0) a->date_format = i;
+        return;
+    case SID_BRIGHTNESS:
+        platform_impose_set(IMPOSE_BRIGHTNESS, i);
+        set_reg_in(a, SYS_DIR, "backlight_brightness", i);
+        return;
+    case SID_BACKLIGHT:
+        if (set_reg_in(a, PS_DIR, "backlight_off_interval", BACKLIGHT_CHOICES[i]) == 0) {
+            a->backlight_s = BACKLIGHT_CHOICES[i];
+            powersave_reset(&a->psave, a->now_ms);
+        }
+        return;
+    case SID_AUTOSLEEP:
+        if (set_reg_in(a, PS_DIR, "suspend_interval", SLEEP_CHOICES[i]) == 0) {
+            a->sleep_s = SLEEP_CHOICES[i];
+            powersave_reset(&a->psave, a->now_ms);
+        }
+        return;
+    default: set_clock(a, id, i); return;
     }
-    if (id != SID_TIMEZONE) { set_clock(a, id, i); return; }
-    if (set_reg(a, "time_zone_offset", TIME_ZONES[i].minutes) == 0) a->tz_minutes = TIME_ZONES[i].minutes;
 }
 
 static void pick_scroll(App *a) {
@@ -504,10 +582,10 @@ static void nick_action(App *a, Action act) {
     int rc = sysreg_set_str(SYS_DIR, "owner_name", a->osk.text);
     log_msg("settings: owner_name rc=%d", rc);
     if (rc == 0) {
-        snprintf(a->nickname, sizeof a->nickname, "%s", a->osk.text);
+        utf8_copy(a->nickname, sizeof a->nickname, a->osk.text);   // a name keeps to OSK_NAME_MAX
         ui_toast(a, tr(S_ST_NICK_SAVED));
     } else {
-        ui_toast(a, tr(S_ST_REG_FAILED));
+        ui_fail(a, S_ST_REG_FAILED);
     }
     a->nick_open = 0;
 }
@@ -546,7 +624,7 @@ void settings_action(App *a, Action act) {
     }
     case SC_CHANGE: change(a, c.id, c.delta); break;
     case SC_PICK:
-        if (c.id != SID_TIMEZONE && !a->ark_text) { ui_toast(a, tr(S_ST_ARK_READ_FAILED)); break; }
+        if (pick_needs_ark(c.id) && !a->ark_text) { ui_fail(a, S_ST_ARK_READ_FAILED); break; }
         a->pick_id = c.id;
         a->pick_sel = pick_current(a, c.id);
         a->pick_top = 0;
@@ -576,6 +654,7 @@ void settings_clock_prompt_action(App *a, Action act) {
             a->nav.depth = 0;
             setmenu_init(&a->setmenu, a->has_wifi);
             a->setmenu.is_go = platform_model() == 4;   // PSP Go: internal storage rows (1.2.6)
+            a->setmenu.show_site = a->lib->settings.site;   // init now clears it (1.3.12)
             setmenu_handle(&a->setmenu, ACT_CONFIRM, VISIBLE_ROWS);   // root row 0 = Time
             open_date_editor(a);
         }
@@ -584,9 +663,15 @@ void settings_clock_prompt_action(App *a, Action act) {
 
 static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
     out[0] = '\0';
-    static const StrId DF[3] = { S_ST_DF_YMD, S_ST_DF_MDY, S_ST_DF_DMY };
+    // Drop-down rows show the label from their list; the rows below keep their exact value even when it is
+    // not one of the list's (a time zone, a clock or a timeout set elsewhere).
+    int exact = e->id == SID_TIMEZONE || e->id == SID_BACKLIGHT || e->id == SID_AUTOSLEEP || clock_target(e->id) >= 0;
+    if (e->dropdown && !exact) {
+        if (pick_needs_ark(e->id) && !a->ark_text) return;
+        pick_label(e->id, pick_current(a, e->id), out, cap);
+        return;
+    }
     switch (e->id) {
-    case SID_DATE_FORMAT: snprintf(out, cap, "%s", tr(DF[a->date_format])); break;
     case SID_TIME_FORMAT: snprintf(out, cap, "%s", tr(a->time_h12 ? S_ST_TF_12 : S_ST_TF_24)); break;
     case SID_TIMEZONE: zone_text(a->tz_minutes, out, cap); break;
     case SID_LANGUAGE: snprintf(out, cap, "%s", tr(S_LANG_NAME)); break;
@@ -594,13 +679,13 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
     case SID_NICKNAME: snprintf(out, cap, "%s", a->nickname); break;
     case SID_GITHUB: snprintf(out, cap, "feer41rus/psp_nemo_launcher"); break;
     case SID_SITE_INFO: snprintf(out, cap, "nemoleague.ru"); break;
+    case SID_VERBOSE_LOG: snprintf(out, cap, "%s", tr(a->lib->settings.verbose_log ? S_ST_V_ON : S_ST_V_OFF)); break;
     case SID_DBG_RAM: case SID_DBG_CPU: case SID_DBG_FPS: {
         const NemoSettings *s = &a->lib->settings;
         int on = e->id == SID_DBG_RAM ? s->dbg_ram : e->id == SID_DBG_CPU ? s->dbg_cpu : s->dbg_fps;
         snprintf(out, cap, "%s", tr(on ? S_ST_V_ON : S_ST_V_OFF));
         break;
     }
-    case SID_LOG_KEEP: pick_label(SID_LOG_KEEP, pick_current(a, SID_LOG_KEEP), out, cap); break;
     case SID_BAT_CHARGE: case SID_BAT_STATE: {   // read at most once a second (1.2.2)
         static BatInfo b;
         static uint32_t at;
@@ -615,35 +700,21 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
         }
         break;
     }
-    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_REPLACE_XMB:
-    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: {
+    case SID_SHOW_XMB_EXIT: case SID_NCL_LOGO: case SID_SITE: case SID_SHOW_MUSIC: case SID_SHOW_PHOTO: case SID_REPLACE_XMB:
+    case SID_SPLASH_HELLO: case SID_SPLASH_NCL: case SID_UI_SOUNDS: case SID_CONTROL_CENTER: case SID_BAT_PCT: case SID_LOW_SPACE: {
         const NemoSettings *s = &a->lib->settings;
         int on = e->id == SID_SHOW_XMB_EXIT ? s->xmb_exit : e->id == SID_NCL_LOGO ? s->ncl_logo
+                 : e->id == SID_BAT_PCT ? s->bat_pct : e->id == SID_LOW_SPACE ? s->low_space
                  : e->id == SID_SITE ? s->site : e->id == SID_REPLACE_XMB ? s->replace_xmb
                  : e->id == SID_SPLASH_HELLO ? s->splash_hello : e->id == SID_SPLASH_NCL ? s->splash_ncl
-                 : e->id == SID_UI_SOUNDS ? s->ui_sounds : e->id == SID_CONTROL_CENTER ? s->control_center : s->show_music;
+                 : e->id == SID_UI_SOUNDS ? s->ui_sounds : e->id == SID_CONTROL_CENTER ? s->control_center
+                 : e->id == SID_SHOW_PHOTO ? s->show_photo : s->show_music;
         snprintf(out, cap, "%s", tr(!on ? S_ST_V_OFF : e->id == SID_SPLASH_NCL ? S_ST_V_NEXT_START : S_ST_V_ON));
         break;
     }
-    case SID_USBCHARGE: case SID_HIGHMEM: case SID_MSCACHE: case SID_INFERNO: case SID_SKIPLOGO: case SID_NOLED:
-    case SID_NOUMD: case SID_NOANALOG: case SID_UMDREGION: {
-        static const StrId HIGHMEM[5] = { S_ST_V_OFF, S_ST_V_DEFAULT, S_ST_V_AUTO, S_ST_V_16MB, 0 };
-        static const StrId SKIP[4] = { S_ST_V_OFF, S_ST_V_ON, S_ST_V_GAMEBOOT, S_ST_V_COLDBOOT };
-        static const StrId REGION[4] = { S_ST_V_DEFAULT, S_ST_V_US, S_ST_V_EU, S_ST_V_JP };
-        static const char *const MSC[4] = { NULL, "4 KiB", "8 KiB", "16 KiB" };
-        static const char *const INF[3] = { NULL, "LRU", "RR" };
-        if (!a->ark_text) break;
-        int c = arkopt_get(a->ark_text, ark_opt(e->id));
-        const char *s = NULL;
-        if (e->id == SID_HIGHMEM) s = c == 4 ? "MAX" : tr(HIGHMEM[c]);
-        else if (e->id == SID_SKIPLOGO) s = tr(SKIP[c]);
-        else if (e->id == SID_UMDREGION) s = tr(REGION[c]);
-        else if (e->id == SID_MSCACHE) s = c ? MSC[c] : tr(S_ST_V_OFF);
-        else if (e->id == SID_INFERNO) s = c ? INF[c] : tr(S_ST_V_OFF);
-        else s = tr(c ? S_ST_V_ON : S_ST_V_OFF);
-        snprintf(out, cap, "%s", s);
+    case SID_USBCHARGE: case SID_NOLED: case SID_NOUMD: case SID_NOANALOG:
+        if (a->ark_text) pick_label(e->id, arkopt_get(a->ark_text, ark_opt(e->id)), out, cap);
         break;
-    }
     case SID_OC_GAMES: case SID_OC_XMB: case SID_OC_NEMO: {
         if (!a->ark_text) break;
         int mhz = arkclock_get(a->ark_text, (ClockTarget)clock_target(e->id));
@@ -651,14 +722,8 @@ static void value_text(const App *a, const SetEntry *e, char *out, size_t cap) {
         else snprintf(out, cap, tr(mhz > 333 ? S_ST_MHZ_EXP_FMT : S_ST_MHZ_FMT), mhz);
         break;
     }
-    case SID_BRIGHTNESS: snprintf(out, cap, tr(S_ST_LEVEL_FMT), brightness_now() + 1); break;
-    case SID_BACKLIGHT: case SID_AUTOSLEEP: {
-        int s = e->id == SID_BACKLIGHT ? a->backlight_s : a->sleep_s;
-        if (s <= 0) snprintf(out, cap, "%s", tr(S_OFF));
-        else if (s < 60) snprintf(out, cap, tr(S_ST_SEC_FMT), s);
-        else snprintf(out, cap, tr(S_ST_MIN_FMT), s / 60);
-        break;
-    }
+    case SID_BACKLIGHT: seconds_text(a->backlight_s, out, cap); break;
+    case SID_AUTOSLEEP: seconds_text(a->sleep_s, out, cap); break;
     case SID_DATETIME: {
         DateTime now;
         char d[16], t[16];
@@ -796,7 +861,7 @@ void ui_settings_draw(const App *app) {
     if (app->nick_open) ui_osk_draw(app);
     if (app->pick_open) {                         // drop-down next to the selected row
         int pn = pick_count(app->pick_id), rows = pn < PICK_ROWS ? pn : PICK_ROWS;
-        int w = app->pick_id == SID_TIMEZONE ? 300 : 190, rh = 22, h = rows * rh + 12;
+        int w = app->pick_id == SID_TIMEZONE ? 300 : app->pick_id == SID_LIB_BG ? 230 : 190, rh = 22, h = rows * rh + 12;
         int x = SCREEN_W - w - 30, py = CONTENT_Y + (CONTENT_H - h) / 2;
         gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x00000070);
         gfx_round_rect(x, py, w, h, 10, 0x1a2230fa);

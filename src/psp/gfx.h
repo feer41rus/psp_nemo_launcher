@@ -18,9 +18,11 @@
 #define COL_WARN      0xffcf5aff
 #define COL_BAR       0x0a0e14ff
 
-typedef enum { FONT_SMALL, FONT_BODY, FONT_TITLE, FONT_BOLD, FONT_TINY, FONT_COUNT } FontId;
+typedef enum { FONT_SMALL, FONT_BODY, FONT_TITLE, FONT_BOLD, FONT_TINY, FONT_SUB, FONT_COUNT } FontId;   // FONT_SUB: subtitles, any size
 
-typedef enum { ICON_BATTERY, ICON_WIFI, ICON_NOTE } StatusIcon;
+typedef enum { ICON_BATTERY, ICON_WIFI, ICON_NOTE, ICON_BT } StatusIcon;
+#define BAT_ICON_BODY 19   // 1.3.12: four 3 px cells, 1 px apart, 1 px from the case on each side
+#define BAT_ICON_W 22      // body + cap + 1
 
 int gfx_init(void);
 void gfx_quit(void);
@@ -35,6 +37,8 @@ int gfx_text_width(FontId f, const char *utf8);
 // platform_ms() just before the last present (which waits for vsync): frame work ends there.
 uint32_t gfx_present_ms(void);
 int gfx_text_height(FontId f);
+void gfx_sub_font_size(int px);                 // video subtitles (1.3.3): FONT_SUB reopened at px, its caches dropped
+SDL_Texture *gfx_text_texture(FontId f, uint32_t rgba, const char *utf8, int *w, int *h);   // owned by the caller
 // Draw text clipped to max_w pixels, ending with "…" when it does not fit.
 void gfx_text_fit(FontId f, int x, int y, int max_w, uint32_t rgba, const char *utf8);
 

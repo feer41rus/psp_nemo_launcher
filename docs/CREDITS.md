@@ -47,4 +47,12 @@
 - **SDL2, SDL2_mixer, SDL2_ttf, SDL2_image** — https://github.com/libsdl-org (zlib) — графика, звук, шрифты, картинки.
 - **SDL2_gfx** — https://www.ferzkopp.net/wordpress/2016/01/02/sdl_gfx-sdl2_gfx/ (zlib) — примитивы (скругления, окружности).
 - **cJSON** — https://github.com/DaveGamble/cJSON (MIT) — JSON для данных Nemo.
+- **libjpeg-turbo** — https://github.com/libjpeg-turbo/libjpeg-turbo (IJG + BSD-3-Clause + zlib) — «Фото»: быстрая распаковка JPEG с уменьшением, поворот без потерь, построчная запись больших фото.
+- **libpng** — http://www.libpng.org/pub/png/libpng.html (libpng license) — «Фото»: построчное чтение и запись PNG при повороте больших фото.
+- **PMP Mod AVC — avc.c** (Sorin P. C. «magiK», копия в openTri) — https://github.com/albe/openTri/blob/main/src/pmp/avc.c (GPL-2.0-or-later) — «Видео»: как подавать кадры H.264 аппаратному декодеру PSP (`sceMpegAvcDecode`, копирование кадра в Media Engine).
+- **cooleyes — avcdecoder sample (PMPlayer Advance)** — https://archive.org/details/avcdecoder-3xx.-7z (GPL-2.0-or-later) — «Видео»: порядок вызовов для H.264 в MP4 через `mpeg_vsh` (`sceMpegGetAvcNalAu`, `sceMpegAvcDecodeDetail2`, `sceMpegBaseCscAvc`), NID этих функций, режимы Media Engine.
+- **PPSSPP** — https://github.com/hrydgard/ppsspp (GPL-2.0-or-later) — справочник поведения `sceMpeg`/`sceJpeg` и находка: XMB запускает Media Engine в режиме 3 (`sceMeBootStart`, PR #22768).
+- **LightMP3** (Sakya и др.) — https://wololo.net/talk/viewtopic.php?t=48108 (GPL) — NID `sceMeBootStart` для 6.60/6.61 (`0x5DFF5C50`).
 - **Inter** — https://github.com/rsms/inter (SIL OFL 1.1) — шрифт интерфейса (урезан до латиницы и кириллицы) и растровый шрифт окна Control Center.
+- **Pillow** — https://github.com/python-pillow/Pillow (MIT-CMU) и **NumPy** — https://github.com/numpy/numpy (BSD-3-Clause) — генератор фонов «Библиотеки» (`tools/make_library_bgs.py`): рисование, свечение, матовое покрытие.
+- **«Господин Никто» (Mr. Nobody, реж. Жако Ван Дормель, 2009)** — идея имени Nemo и смысл фонов «Библиотеки»: выбор, возможности, альтернативные пути. Кадров из фильма в Nemo нет.

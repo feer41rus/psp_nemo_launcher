@@ -24,5 +24,6 @@ int text_decode(const uint8_t *s, size_t n, int enc, char *out, size_t cap);
 
 // Heuristic: 8-bit text that looks like Russian in cp1251 (two high letters in a row).
 int cp1251_likely(const uint8_t *s, size_t n);
+uint32_t cp1251_to_unicode(uint8_t c);   // one cp1251 byte as a Unicode code point (subtitles too)
 
 #endif

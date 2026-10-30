@@ -144,6 +144,7 @@ static int save_shot(const CcFrame *fb) {
     game_id(id, sizeof id);
     sceIoMkdir("ms0:/PICTURE", 0777);
     sceIoMkdir("ms0:/PICTURE/Nemo", 0777);
+    sceIoMkdir("ms0:/PICTURE/Nemo/Games", 0777);   // 1.3.1
     SceIoStat st;
     int n = 1;
     for (; n < 1000; n++) {

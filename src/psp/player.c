@@ -1,6 +1,7 @@
 #include "player.h"
 #include "hwmp3.h"
 #include "flacplay.h"
+#include "umdsrc.h"
 #include "log.h"
 #include "platform.h"
 #include <SDL2/SDL.h>
@@ -52,7 +53,7 @@ static int is_mp3(const char *path) {
 
 static int is_flac(const char *path) {
     const char *dot = strrchr(path, '.');
-    return dot && strcasecmp(dot, ".flac") == 0;
+    return (dot && strcasecmp(dot, ".flac") == 0) || umdsrc_is_path(path);   // UMD Music: the same PCM path (1.3.5)
 }
 
 static void on_finished(void) { finished = 1; }

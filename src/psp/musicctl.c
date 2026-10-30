@@ -118,7 +118,7 @@ static void m3u_export(App *a) {
     int rc = len >= 0 ? safe_write_text(path, buf) : -1;
     free(buf);
     log_msg("m3u: export %s (%d tracks) rc=%d", path, n, rc);
-    if (rc != 0) { ui_toast(a, tr(S_M3U_SAVE_FAIL)); return; }
+    if (rc != 0) { ui_fail(a, S_M3U_SAVE_FAIL); return; }
     lower_copy(id, sizeof id, path);
     mplaylist_add(&a->mdata->m3u_imported, id);   // our own file must not come back as a duplicate
     mdata_save(a->mdata, MUSIC_DATA);
@@ -265,6 +265,11 @@ static int now_playing_visible(const App *a) {
     return 0;
 }
 
+int music_fullscreen(const App *a) {
+    return a->nav.tab == TAB_MUSIC && nav_top(&a->nav) == SCR_ROOT && !a->media_suspended &&
+           a->mlib.track_count > 0 && now_playing_visible(a);
+}
+
 static void announce(App *a, int track) {
     if (now_playing_visible(a)) return;   // the screen already shows the track
     const Track *t = &a->mlib.tracks[track];
@@ -289,7 +294,7 @@ static void track_started(App *a) {
     int t = queue_current(&a->queue);
     if (t < 0) return;
     load_failures = 0;
-    mdata_touch_recent(a->mdata, a->mlib.tracks[t].id);
+    if (!umdmusic_is_track(&a->mlib.tracks[t])) mdata_touch_recent(a->mdata, a->mlib.tracks[t].id);   // a disc comes and goes
     if (power_screen_is_off()) power_set_listening(1, a->mlib.tracks[t].format);   // clock per format
     if (!a->listening) announce(a, t);
     a->music_resume_ms = 0;
@@ -300,7 +305,7 @@ static void track_started(App *a) {
 }
 
 static void track_failed(App *a) {
-    ui_toast(a, tr(S_MUSIC_ERR_PLAY));
+    ui_fail(a, S_MUSIC_ERR_PLAY);
     if (++load_failures >= a->queue.count || queue_next(&a->queue, 1) < 0) {
         load_failures = 0;
         return;
@@ -410,9 +415,68 @@ static int rescan_main(void *unused) {
     return 0;
 }
 
+// UMD Music (1.3.5): the disc's album joins the library once the library is loaded and leaves with the disc.
+static void umd_attach(App *a) {
+    if (!a->umd_music || a->umd_ref.first_track >= 0 || a->music_off || a->music_lib_loading || a->music_scan_state == 1)
+        return;
+    if (a->umd_n_streams <= 0) {
+        if (a->umd_music_play) { a->umd_music_play = 0; ui_fail(a, S_UMD_MUSIC_EMPTY); }
+        return;
+    }
+    const char *files[64];
+    for (int i = 0; i < a->umd_n_streams; i++) files[i] = a->umd_streams[i];
+    if (umdmusic_attach_ref(&a->mlib, a->umd_music_title, tr(S_UMD_TRACK_FMT), "disc0:/UMD_AUDIO/STREAM", files,
+                            a->umd_n_streams, &a->umd_ref) != 0) {
+        log_fail("umdmusic: album not added (out of memory)");
+        a->umd_music = 0;
+        return;
+    }
+    log_msg("umdmusic: album \"%s\" added: tracks %d..%d, album %d", a->umd_music_title, a->umd_ref.first_track,
+            a->umd_ref.first_track + a->umd_n_streams - 1, a->umd_ref.album);
+    views_rebuild(a);
+    if (a->umd_music_play) {   // START on the notice: the album from its first track, Now Playing
+        a->umd_music_play = 0;
+        int tracks[64];
+        for (int i = 0; i < a->umd_n_streams; i++) tracks[i] = a->umd_ref.first_track + i;
+        queue_set(&a->queue, tracks, a->umd_n_streams, 0);
+        play_current(a, 0);
+        while (a->nav.depth > 0) nav_pop(&a->nav);
+        a->nav.tab = TAB_MUSIC;
+        mnav_init(&a->mnav);
+        mnav_push(&a->mnav, MS_NOW);
+    }
+}
+
+int music_current_is_umd(const App *a) {
+    int t = queue_current(&a->queue);
+    return t >= 0 && t < a->mlib.track_count && umdmusic_is_track(&a->mlib.tracks[t]);
+}
+
+void music_umd_detach(App *a) {
+    a->umd_music_play = 0;
+    if (a->umd_ref.first_track < 0) return;
+    int first = a->umd_ref.first_track, removed = 0;
+    if (music_current_is_umd(a)) {   // its track was playing: the disc is gone, so is the queue
+        player_stop();
+        queue_init(&a->queue, (uint32_t)platform_ms() | 1);
+        removed = -1;
+    } else {
+        for (int i = a->queue.count - 1; i >= 0; i--)
+            if (a->queue.items[i] >= first && queue_remove(&a->queue, i) == 0) removed++;
+    }
+    umdmusic_detach(&a->mlib, &a->umd_ref);
+    log_msg("umdmusic: album removed (queue %s)", removed < 0 ? "cleared" : "kept");
+    if (removed) log_dbg("umdmusic: %d queue items removed", removed);
+    views_rebuild(a);
+}
+
+// The library replaced or freed: the album went with it (added again by music_tick).
+static void umd_forget(App *a) { a->umd_ref.first_track = a->umd_ref.album = -1; }
+
 void music_reload(App *a) {
     if (a->music_off) return;
     musiclib_free(&a->mlib);
+    umd_forget(a);
     musiclib_init(&a->mlib);
     ScanStats st = { 0, 0 };
     music_scan(MUSIC_ROOT, MUSIC_SCAN_CACHE, &a->mlib, &st);
@@ -421,6 +485,18 @@ void music_reload(App *a) {
     a->music_resume_ms = mdata_restore_queue(a->mdata, &a->mlib, &a->queue, &pos) == 0 ? pos : 0;
     mnav_init(&a->mnav);
     views_rebuild(a);
+}
+
+// Start-up (1.3.1): Home first, then the music library on its thread — after Home's artwork is in
+// (the art worker idle for 20 frames) or 6 s after the menu at the latest.
+void music_startup_scan(App *a, uint32_t menu_ms) {
+    if (a->music_lib_loading != 1 || a->music_scan_state == 1) return;
+    static int idle_frames;
+    idle_frames = art_busy() ? 0 : idle_frames + 1;
+    if (idle_frames < 20 && a->now_ms - menu_ms < 6000) return;
+    a->music_lib_loading = 2;
+    a->music_lib_t0 = platform_ms();
+    music_rescan_start(a);
 }
 
 void music_rescan_start(App *a) {
@@ -447,20 +523,29 @@ static void rescan_poll(App *a) {
     int n = rescan_lib.track_count;
     log_msg("music: rescan found %d tracks, %d albums (parsed %d, cached %d)", n, rescan_lib.album_count,
             rescan_stats.parsed, rescan_stats.reused);
-    if (n > 0 && a->mlib.track_count == 0) {   // only offered while the library is empty: no queue to remap
+    int card_tracks = a->umd_ref.first_track >= 0 ? a->umd_ref.first_track : a->mlib.track_count;   // a UMD album aside
+    if (n > 0 && card_tracks == 0) {   // only offered while the library is empty: no queue to remap
+        if (a->umd_ref.first_track >= 0) music_umd_detach(a);
         musiclib_free(&a->mlib);
+        umd_forget(a);
         a->mlib = rescan_lib;
         uint32_t pos = 0;
         if (mdata_restore_queue(a->mdata, &a->mlib, &a->queue, &pos) == 0) a->music_resume_ms = pos;
         mnav_init(&a->mnav);
         views_rebuild(a);
         a->music_scan_state = 0;
-        char msg[96];
-        snprintf(msg, sizeof msg, tr(S_MUSIC_SCAN_FOUND_N), n);
-        ui_toast(a, msg);
+        if (!a->music_lib_loading) {   // the start-up load is silent
+            char msg[96];
+            snprintf(msg, sizeof msg, tr(S_MUSIC_SCAN_FOUND_N), n);
+            ui_toast(a, msg);
+        }
     } else {
         musiclib_free(&rescan_lib);
         a->music_scan_state = n > 0 ? 0 : 2;
+    }
+    if (a->music_lib_loading) {
+        a->music_lib_loading = 0;
+        log_time("music_library", platform_ms() - a->music_lib_t0);
     }
 }
 
@@ -468,6 +553,7 @@ static void eq_apply(App *a);
 
 void music_init(App *a, int enabled) {
     a->mdata = calloc(1, sizeof *a->mdata);
+    a->umd_ref.first_track = a->umd_ref.album = -1;
     mdata_init(a->mdata);
     queue_init(&a->queue, (uint32_t)platform_ms() | 1);
     mnav_init(&a->mnav);
@@ -475,7 +561,8 @@ void music_init(App *a, int enabled) {
     uint32_t t0 = platform_ms();
     ScanStats st = { 0, 0 };
     a->music_off = !enabled;
-    if (enabled) music_scan(MUSIC_ROOT, MUSIC_SCAN_CACHE, &a->mlib, &st);   // off: the library is not loaded
+    // 1.3.1: the library is read on a thread once Home is on screen (music_startup_scan); off: not at all.
+    a->music_lib_loading = enabled;
     int rc = mdata_load(a->mdata, MUSIC_DATA);
     if (rc < 0) {   // keep the user's file for recovery instead of overwriting it with empty data
         remove(MUSIC_DATA ".bad");
@@ -488,6 +575,7 @@ void music_init(App *a, int enabled) {
     log_msg("music: %d tracks, %d albums in %u ms (parsed %d, cached %d), data rc=%d, queue %s (%d @%u ms)",
             a->mlib.track_count, a->mlib.album_count, (unsigned)(platform_ms() - t0), st.parsed, st.reused, rc,
             restored ? "restored" : "empty", a->queue.count, (unsigned)pos);
+    log_time("music_library", platform_ms() - t0);
     bgsave_init();
     if (player_init() != 0) log_msg("music: audio unavailable");
     power_init();
@@ -504,6 +592,7 @@ void music_set_enabled(App *a, int on) {
         sleep_set(&a->sleep, SLEEP_OFF, 0);
         a->music_off = 1;
         musiclib_free(&a->mlib);
+        umd_forget(a);
         musiclib_init(&a->mlib);
         queue_init(&a->queue, (uint32_t)platform_ms() | 1);
         mnav_init(&a->mnav);
@@ -532,6 +621,7 @@ void music_tick(App *a) {
         network_on_wake(a);
     }
     if (a->music_off) return;
+    umd_attach(a);
     uint32_t poll_t0 = platform_ms();
     int started = player_poll();
     if (started > 0) {
@@ -823,7 +913,9 @@ void music_action(App *a, Action act) {
     }
     MusicScreen top = mnav_top(&a->mnav);
     if (top == MS_OSK) { osk_input(a, act); return; }
-    if (top == MS_LISTEN) {                          // any button wakes the screen and does nothing else
+    if (top == MS_LISTEN) {                          // L/R switch tracks in the dark (1.3.11, as SELECT+L/R do);
+        if (act == ACT_TAB_PREV) { prev(a); return; }  // any other button wakes the screen and does nothing else
+        if (act == ACT_TAB_NEXT) { next(a); return; }
         leave_listening(a);
         return;
     }

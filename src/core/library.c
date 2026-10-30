@@ -1,4 +1,5 @@
 #include "library.h"
+#include "libbg.h"
 #include "utf8.h"
 #include "cJSON.h"
 #include "safefile.h"
@@ -18,9 +19,14 @@ void library_settings_defaults(NemoSettings *s) {
     s->splash_ncl = 0;   // the seller arms it for the buyer's first start; it turns itself off once shown
     s->site = 1;
     s->show_music = 1;
+    s->show_photo = 1;
     s->replace_xmb = 0;
     s->dbg_ram = s->dbg_cpu = s->dbg_fps = 0;
     s->log_keep = LOG_KEEP_DEFAULT;
+    s->verbose_log = 0;
+    s->lib_bg = 0;
+    s->bat_pct = 1;
+    s->low_space = 1;
 }
 
 void library_init(Library *l) {
@@ -49,6 +55,18 @@ int library_peek_log_keep(const char *path) {
     int keep = cJSON_IsObject(st) ? read_log_keep(st) : LOG_KEEP_DEFAULT;
     cJSON_Delete(root);
     return keep;
+}
+
+int library_peek_verbose(const char *path) {
+    int missing = 0;
+    char *text = safe_read_text(path, 4 * 1024 * 1024, &missing);
+    if (!text) return 0;
+    cJSON *root = cJSON_Parse(text);
+    free(text);
+    const cJSON *v = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(root, "settings"), "verbose_log");
+    int on = cJSON_IsTrue(v);
+    cJSON_Delete(root);
+    return on;
 }
 
 // Copy a trimmed name; returns 0 if the result is empty.
@@ -171,11 +189,17 @@ int library_load(Library *l, const char *path) {
         read_flag(st, "control_center", &l->settings.control_center);
         read_flag(st, "site", &l->settings.site);
         read_flag(st, "show_music", &l->settings.show_music);
+        read_flag(st, "show_photo", &l->settings.show_photo);
+        read_flag(st, "bat_pct", &l->settings.bat_pct);
+        read_flag(st, "low_space", &l->settings.low_space);
+        const cJSON *bg = cJSON_GetObjectItemCaseSensitive(st, "lib_bg");
+        if (cJSON_IsNumber(bg)) l->settings.lib_bg = libbg_valid(bg->valueint);
         read_flag(st, "replace_xmb", &l->settings.replace_xmb);
         read_flag(st, "dbg_ram", &l->settings.dbg_ram);
         read_flag(st, "dbg_cpu", &l->settings.dbg_cpu);
         read_flag(st, "dbg_fps", &l->settings.dbg_fps);
         l->settings.log_keep = read_log_keep(st);
+        read_flag(st, "verbose_log", &l->settings.verbose_log);
     }
 
     const cJSON *folder;
@@ -232,11 +256,16 @@ int library_save(const Library *l, const char *path) {
     cJSON_AddBoolToObject(st, "control_center", l->settings.control_center);
     cJSON_AddBoolToObject(st, "site", l->settings.site);
     cJSON_AddBoolToObject(st, "show_music", l->settings.show_music);
+    cJSON_AddBoolToObject(st, "show_photo", l->settings.show_photo);
+    cJSON_AddBoolToObject(st, "bat_pct", l->settings.bat_pct);
+    cJSON_AddBoolToObject(st, "low_space", l->settings.low_space);
+    cJSON_AddNumberToObject(st, "lib_bg", l->settings.lib_bg);
     cJSON_AddBoolToObject(st, "replace_xmb", l->settings.replace_xmb);
     cJSON_AddBoolToObject(st, "dbg_ram", l->settings.dbg_ram);
     cJSON_AddBoolToObject(st, "dbg_cpu", l->settings.dbg_cpu);
     cJSON_AddBoolToObject(st, "dbg_fps", l->settings.dbg_fps);
     cJSON_AddNumberToObject(st, "log_keep", l->settings.log_keep);
+    cJSON_AddBoolToObject(st, "verbose_log", l->settings.verbose_log);
     cJSON *folders = cJSON_AddArrayToObject(root, "folders");
     for (int i = 0; i < l->folder_count; i++) {
         cJSON *f = cJSON_CreateObject();

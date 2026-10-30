@@ -11,8 +11,10 @@
 #include "shelves.h"
 #include "mdata.h"
 #include "mnav.h"
+#include "btreg.h"
 #include "mviews.h"
 #include "music.h"
+#include "umdmusic.h"
 #include "notekey.h"
 #include "selectkey.h"
 #include "perfstat.h"
@@ -36,8 +38,9 @@
 
 typedef enum { SET_CONFIRM, SET_LANGUAGE, SET_OPEN_ARK, SET_EXIT_XMB, SET_COUNT } SettingRow;
 
-typedef enum { MI_TO_FOLDER, MI_REMOVE_FROM_FOLDER, MI_DETAILS, MI_RENAME_FOLDER, MI_DELETE_FOLDER } MenuItem;
-typedef enum { OSK_FOR_NEW_FOLDER, OSK_FOR_RENAME, OSK_FOR_NEW_PLAYLIST, OSK_FOR_RENAME_PLAYLIST, OSK_FOR_WIFI_PASSWORD, OSK_FOR_NICKNAME } OskPurpose;
+typedef enum { MI_TO_FOLDER, MI_REMOVE_FROM_FOLDER, MI_DETAILS, MI_RENAME_FOLDER, MI_DELETE_FOLDER, MI_DELETE_GAME } MenuItem;
+typedef enum { OSK_FOR_NEW_FOLDER, OSK_FOR_RENAME, OSK_FOR_NEW_PLAYLIST, OSK_FOR_RENAME_PLAYLIST, OSK_FOR_WIFI_PASSWORD, OSK_FOR_NICKNAME,
+              OSK_FOR_FILE_RENAME, OSK_FOR_NEW_DIR, OSK_FOR_EDIT_LINE, OSK_FOR_FIND } OskPurpose;   // 1.3.2: file manager
 // Network tab screens on top of the section column / panel.
 typedef enum { NETS_MAIN, NETS_OSK, NETS_MENU, NETS_CONFIRM_FORGET, NETS_CONFIRM_RESCAN, NETS_USB, NETS_FTP } NetScreen;
 #define NET_ROWS_MAX (NET_MAX_APS + NET_MAX_PROFILES)
@@ -100,6 +103,8 @@ typedef struct {
     int mconfirm;               // what MS_CONFIRM asks: 0 delete playlist, 1 reset equalizer (1.2.1)
     int music_scan_state;       // 0 idle, 1 scanning the MUSIC folder on a thread, 2 last scan found nothing
     int music_scan_seen;        // tracks seen so far by the running scan
+    int music_lib_loading;      // 1.3.1: 1 = library to load after start-up, 2 = loading on the thread, 0 = done
+    uint32_t music_lib_t0;
     int listening;              // listening mode active (warning screen, then screen off)
     uint32_t listen_started_ms;
     float music_scroll[2];      // library columns
@@ -112,6 +117,8 @@ typedef struct {
     NetNav netnav;
     NetScreen net_screen;
     NetSnapshot net;            // refreshed every frame while Wi-Fi is started
+    BtState bt;                 // PSP Go Bluetooth, read from the registry every 10 s (1.3.12, shown only)
+    uint32_t bt_at;
     NetRow net_rows[NET_ROWS_MAX];
     int net_row_count;
     NetAp net_target;           // network the password keyboard / retry is for
@@ -145,7 +152,13 @@ typedef struct {
     struct SavesScreen *saves;  // saved data: from the game card or Settings (ui_saves.c)
     struct BatteryScreen *battery;   // battery screens (ui_battery.c, 1.2.2)
     struct MemoryScreen *memory;     // memory screens (ui_memory.c, 1.2.6)
+    struct PhotoTab *photo;          // Gallery (ui_photo.c, 1.3.1), NULL until first opened
+    struct OrgTab *org;              // Organizer tab (ui_organizer.c, 1.3.2)
+    struct FilesWin *files;          // file manager (ui_files.c, 1.3.2), NULL while closed
+    struct VideoWin *video;          // video (ui_video.c, 1.3.3), NULL while closed
+    struct CamWin *cam;              // camera (ui_camera.c, 1.3.6), NULL while closed
     int gm_open, gm_sel, gm_mode, gm_pick, gm_yes, gm_with_saves, gm_list;   // game card menu (gamemenu.c)
+    int gm_quick;   // 1.3.9: the delete question came from the shelves' △ menu — "No" goes back to the shelves
     int rx_stage, rx_yes;       // "ARK replaced Nemo, restore?" (selfguard.c)
     float net_scroll;
     int volume;            // last known main volume (0..30), -1 unknown
@@ -156,6 +169,14 @@ typedef struct {
     long long card_bytes;  // its size on the card, -1 unknown (UMD)
     uint32_t umd_notice_until;   // "UMD inserted" notice on screen until (START plays the disc)
     char umd_notice[160];
+    int umd_video;              // a UMD Video disc is in (1.3.3): START on its notice, a row in Video
+    char umd_video_title[128], umd_video_id[16];
+    int umd_music;              // a UMD Music disc is in (1.3.5): an album at the end of Music
+    char umd_music_title[128];
+    char umd_streams[64][24];   // its streams (UMD_AUDIO/STREAM/*.MPS)
+    int umd_n_streams;
+    int umd_music_play;         // START on its notice: play it once it is in the library
+    UmdMusicRef umd_ref;        // where it sits in mlib (first_track -1: not in)
 } App;
 
 typedef struct {
@@ -164,8 +185,10 @@ typedef struct {
 } Hint;
 
 void ui_toast(App *app, const char *msg);
+void ui_fail(App *app, StrId msg);            // a failure: the toast, "FAIL: ..." in the log, the detailed-log hint (1.3.3)
 
 void ui_chrome_draw(const App *app);
+void ui_clock_draw(const App *app);            // clock and battery only (full-screen Now Playing)
 void ui_hints_draw(const App *app, const Hint *hints, int n);
 void ui_toast_draw(const App *app);
 void ui_volume_draw(const App *app);
@@ -185,6 +208,9 @@ void ui_card_draw(App *app);
 void music_init(App *a, int enabled);
 void music_set_enabled(App *a, int on);       // Settings › Nemo › Music (unload / reload)
 void music_rescan_start(App *a);
+void music_umd_detach(App *a);           // the UMD Music album out of the library (disc out, 1.3.5)
+int  music_current_is_umd(const App *a); // the playing track is on a UMD disc
+void music_startup_scan(App *a, uint32_t menu_ms);   // 1.3.1: the library after Home is up
 void music_reload(App *a);                     // synchronous rescan of ms0:/MUSIC, queue restored by id               // scan ms0:/MUSIC on a worker thread, swapped in by music_tick
 void music_tick(App *a);                       // every frame: track end, timer, periodic save
 void music_note(App *a, NoteEvent e);          // ♪ button events
@@ -192,6 +218,7 @@ void music_hprm(App *a, uint32_t key);         // headphone remote, edge-detecte
 void music_action(App *a, Action act);         // input while the Music tab is shown
 void music_save_state(App *a);                 // before leaving Nemo / launching a game
 void music_enter_listening(App *a);            // show the warning, turn the screen off after 3 s
+int  music_fullscreen(const App *a);           // Now Playing (and its menus): no tab bar, L/R switch tracks
 int  music_playing(const App *a);              // playing (not paused): ♪ icon in the top bar
 int  music_side_tracks(const App *a, int side, const int **tracks);   // tracks of a left-column entry
 // Artist overview on the right (artists view, nothing opened): row 0 "All tracks", then the albums.
@@ -263,9 +290,78 @@ void memory_draw(const App *a);
 void memory_draw_hints(const App *a);
 void memory_tick(App *a);
 void memory_free_text(const char *dev, char *out, size_t cap);  // "12,3 ГБ из 29,8 ГБ", "" if unreadable
+// Organizer tab (ui_organizer.c, 1.3.2): rows that open the Gallery, the file manager, stubs
+void organizer_draw(const App *a);
+void organizer_action(App *a, Action act);
+void organizer_hints(const App *a);
+void organizer_tick(App *a);                    // every frame: the open window, or the menus' artwork back
+int  organizer_owns_buttons(const App *a);      // a window or the stub note: L and R are theirs
+int  organizer_fullscreen(const App *a);        // a window: no tab bar
+int  organizer_busy(const App *a);              // every button, HOME too (rotation, copying, unsaved text)
+// Gallery (ui_photo.c, 1.3.1 Photos): opened from the Organizer
+void photo_open(App *a);
+void photo_open_file(App *a, const char *dir, const char *name);   // file manager: that folder's pictures
+const char *photo_last_path(const App *a);     // after photo_open_file: the picture shown last
+void photo_tab_draw(const App *a);
+void photo_tab_action(App *a, Action act);
+void photo_tab_hints(const App *a);
+void photo_tab_tick(App *a);                    // every frame: list, thumbnails, rotation; frees it all off the tab
+int  photo_tab_owns_buttons(const App *a);      // the window is open (or a large photo rotating)
+int  photo_tab_fullscreen(const App *a);        // the window: no tab bar
+int  photo_tab_busy(const App *a);              // a large photo is rotating: every button, HOME too
+// File manager (ui_files.c, 1.3.2): opened from the Organizer
+void files_open(App *a);
+int  files_is_open(const App *a);
+void files_action(App *a, Action act);
+void files_draw(const App *a);
+void files_hints(const App *a);
+void files_tick(App *a);                        // every frame; closes the window off the tab
+int  files_busy(const App *a);                  // copying, or the editor has unsaved text: HOME is theirs
+int  files_worker_busy(void);                   // a thread works on the card: USB must wait
+void files_worker_stop(void);                   // power off / restart: cancel the copy and wait for it
+// Video (ui_video.c, 1.3.3): the VIDEO folder, the player, subtitles, where each video was left
+void video_win_open(App *a);                    // from the Organizer: the list
+void video_open_file(App *a, const char *path); // from the file manager: straight into the player
+void video_open_umd(App *a);                    // the UMD Video disc: the Video window, playing
+int  video_win_is_open(const App *a);
+int  video_win_playing(const App *a);           // pictures moving: no backlight-off, no sleep
+void video_win_action(App *a, Action act);
+void video_win_draw(const App *a);
+void video_win_hints(const App *a);
+void video_win_tick(App *a);
+void video_sub_shift(App *a, int delta_ms);     // SELECT+Left/Right: subtitles earlier / later
+int  video_is_file(const char *name);           // .avi .mp4 .m4v
+const char *video_last_path(const App *a);
+const char *video_screen(const App *a);         // "list", "player", "player+menu" (log)
+const char *files_screen(const App *a);         // "list", "editor", "progress" (log)
+int  files_osk_open(const App *a);              // its keyboard is up: L held = capitals
+// Camera (ui_camera.c, 1.3.6): Go!Cam viewfinder, photos and video
+void cam_win_open(App *a);
+int  cam_win_is_open(const App *a);
+int  cam_win_busy(const App *a);                // recording or taking a photo: HOME and START notices wait
+void cam_win_action(App *a, Action act);
+void cam_win_filter_next(App *a);               // SELECT alone
+void cam_win_draw(const App *a);
+void cam_win_hints(const App *a);
+void cam_win_tick(App *a);
+const char *cam_screen(const App *a);           // "photo", "video", "recording" (log)
+void shelves_preload(App *a, Tab tab);          // ask for the artwork that tab shows first (no drawing)
+void photo_tab_invalidate(App *a);              // pictures changed (screenshot, USB/FTP): rebuild the list on entry
+// Log analytics (perflog.c, 1.2.6): screen names, per-visit summaries, slow frames, "time:" lines
+void perflog_name(const App *a, char *out, size_t cap);   // "settings/Memory+memory", "music/all_tracks"
+void perflog_frame(App *a, uint32_t frame_ms);            // every frame, after it was measured
+void perflog_second(const App *a, int fps);               // once a second (a->ram_free fresh)
+const char *perflog_screen(void);                         // the screen being measured now
+void log_time(const char *what, uint32_t ms);
+void diag_passport(App *a);   // detailed log: the console's passport (diag.c, 1.3.3)
+void diag_tick(App *a);       // detailed log: a snapshot once a minute             // "time: <what> <ms> ms"
 void settings_ark_value_text(const App *a, SetId id, char *out, size_t cap);   // as the ARK row shows it
 // Game card menu (gamemenu.c)
 void gamemenu_open(App *a);
+int  lowspace_badge_x(App *a);    // Home's "Low on space" badge: its left edge, SCREEN_W when there is none
+void lowspace_draw(App *a);
+void lowspace_invalidate(void);   // read the free space again (games deleted, USB / FTP ended)
+void gamemenu_ask_delete(App *a);   // straight to "Delete forever?" for the open card (the shelves' △ menu)
 void gamemenu_action(App *a, Action act);
 void gamemenu_draw(const App *a);
 void gamemenu_draw_hints(const App *a);

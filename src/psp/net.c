@@ -168,6 +168,7 @@ static void run_scan(void) {
         }
     }
     log_msg("net: scan done r=%08X, %d networks in %u ms", (unsigned)r, n, (unsigned)(platform_ms() - t0));
+    log_msg("time: wifi_scan %u ms", (unsigned)(platform_ms() - t0));   // net thread: plain log_msg
     L();
     if (r >= 0) {
         memcpy(S.aps, aps, sizeof aps);
@@ -228,13 +229,14 @@ static int run_connect_slot(int slot, const char *ssid) {
     L();
     S.phase = NET_ERROR;
     S.error = net_error_text(ev_error, timed_out, sw_off, step);
+    log_fail("wifi: %s (event error %08x, timed out %d, switch off %d, step %d)", tr_en(S.error), (unsigned)ev_error, timed_out, sw_off, step);
     U();
     log_msg("net: connect failed step=%d timeout=%d switch_off=%d error=%08X", step, timed_out, sw_off,
             (unsigned)ev_error);
     return 0;
 }
 
-static void set_error(StrId e) { L(); S.phase = NET_ERROR; S.error = e; U(); }
+static void set_error(StrId e) { L(); S.phase = NET_ERROR; S.error = e; U(); log_fail("wifi: %s", tr_en(e)); }
 
 static void run_connect_ap(const NetAp *ap, const char *pw) {
     read_profiles();

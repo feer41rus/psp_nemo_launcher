@@ -24,13 +24,18 @@ typedef struct {
     int ncl_logo;      // NCL logo on Home (default on)
     int site;          // nemoleague.ru in "About Nemo" (default on)
     int show_music;    // Music tab; off = music stopped and unloaded (default on)
+    int show_photo;    // Photos tab (1.3.1, default on)
     int replace_xmb;   // Nemo instead of XMB (1.1.11, default off)
     int dbg_ram, dbg_cpu, dbg_fps;   // Settings › System › Debug: debug box rows (1.2.0, default off)
     int log_keep;      // runs of nemo.log to keep: 0 (no log), 2, 5, 10, 20 (1.2.0, default 2)
+    int verbose_log;   // Settings › System › Debug › Detailed log: everything, for beta testing (1.3.3, default off)
     int splash_hello;  // welcome splash at power-on (1.2.3, default on)
     int splash_ncl;    // NCL thank-you splash: shown once at the next power-on, then off (1.2.3, default off)
     int ui_sounds;     // interface clicks (1.2.3, default on)
     int control_center;   // Control Center plugin in games (1.2.4, default on)
+    int low_space;     // "Low on space" badge on Home (1.3.10, default on)
+    int bat_pct;       // battery percentage next to the icon at the top right (1.3.9, default on)
+    int lib_bg;        // Library background, a LibBg: Nemo's pictures or LIBBG_OWN from the Gallery (1.3.8, default 0)
 } NemoSettings;
 
 void library_settings_defaults(NemoSettings *s);
@@ -52,6 +57,7 @@ int library_load(Library *l, const char *path);        // 0 ok or missing file; 
 int library_save(const Library *l, const char *path);  // tmp + rename; creates parent dirs
 // settings.log_keep straight from the file, before the log is opened (LOG_KEEP_DEFAULT when absent/bad).
 int library_peek_log_keep(const char *path);
+int library_peek_verbose(const char *path);   // settings.verbose_log the same way (0 when absent)
 
 int library_folder_create(Library *l, const char *name);           // index, -1 empty/dup/full
 int library_folder_rename(Library *l, int idx, const char *name);  // 0, -1 empty/dup

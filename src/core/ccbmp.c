@@ -32,5 +32,5 @@ void ccbmp_row(const CcFrame *fb, int y, uint8_t *out) {
 }
 
 int ccbmp_name(char *out, size_t cap, const char *game_id, int n) {
-    return snprintf(out, cap, "ms0:/PICTURE/Nemo/%s_%03d.bmp", game_id && *game_id ? game_id : "GAME", n);
+    return snprintf(out, cap, "ms0:/PICTURE/Nemo/Games/%s_%03d.bmp", game_id && *game_id ? game_id : "GAME", n);
 }

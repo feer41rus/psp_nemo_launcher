@@ -24,7 +24,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#define BAT_DIR "ms0:/PSP/NEMO/battery"
+#define BAT_DIR "ms0:/PSP/NEMO/battery"          // data: the learned model, settings to restore
+#define BAT_LOG_DIR "ms0:/PSP/NEMO/logs/battery"   // test logs (1.3.3: with the other logs)
 #define BAT_KEEP 5
 #define BAT_SAMPLE_MS 10000             // one log line every 10 s (a power-off loses at most 10 s)
 #define BAT_GUARD BAT_DIR "/restore.txt"   // power settings to put back after the test
@@ -193,11 +194,11 @@ static char *read_file(const char *path) {
     return buf;
 }
 
-// Our log names in BAT_DIR, newest first.
+// Our log names in BAT_LOG_DIR, newest first.
 static int list_logs(char names[][24], int max) {
     char all[64][24];
     int n = 0;
-    DIR *d = opendir(BAT_DIR);
+    DIR *d = opendir(BAT_LOG_DIR);
     if (!d) return 0;
     struct dirent *e;
     while ((e = readdir(d)) != NULL && n < 64)
@@ -224,7 +225,7 @@ static void prune_logs(void) {
     int k = batlog_prune(ptr, n, BAT_KEEP, del);
     for (int i = 0; i < k; i++) {
         char p[160];
-        snprintf(p, sizeof p, BAT_DIR "/%s", names[del[i]]);
+        snprintf(p, sizeof p, BAT_LOG_DIR "/%s", names[del[i]]);
         remove(p);
         log_msg("battery: old log %s removed", p);
     }
@@ -235,7 +236,7 @@ static void load_results(BatteryScreen *s) {
     s->pts_for = -1;
     for (int i = 0; i < s->count; i++) {
         char p[160];
-        snprintf(p, sizeof p, BAT_DIR "/%s", s->names[i]);
+        snprintf(p, sizeof p, BAT_LOG_DIR "/%s", s->names[i]);
         char *t = read_file(p);
         int n;
         if (!t || batlog_parse(t, &s->sums[i], NULL, 0, &n) != 0) memset(&s->sums[i], 0, sizeof s->sums[i]);
@@ -246,7 +247,7 @@ static void load_results(BatteryScreen *s) {
 static void load_points(BatteryScreen *s) {
     if (s->pts_for == s->sel || s->sel >= s->count) return;
     char p[160];
-    snprintf(p, sizeof p, BAT_DIR "/%s", s->names[s->sel]);
+    snprintf(p, sizeof p, BAT_LOG_DIR "/%s", s->names[s->sel]);
     char *t = read_file(p);
     BatSummary sum;
     s->n_pts = 0;
@@ -350,11 +351,12 @@ static void test_start(App *a, BatTestMode mode) {
     BatteryScreen *s = a->battery;
     mkdir("ms0:/PSP/NEMO", 0777);
     mkdir(BAT_DIR, 0777);
+    mkdir(BAT_LOG_DIR, 0777);
     ScePspDateTime now;   // seconds in the name: two tests in one minute keep two logs
     if (sceRtcGetCurrentClockLocalTime(&now) < 0) memset(&now, 0, sizeof now);
     char iso[32];
     snprintf(iso, sizeof iso, "%04d-%02d-%02dT%02d:%02d", now.year, now.month, now.day, now.hour, now.minute);
-    snprintf(s->log_path, sizeof s->log_path, BAT_DIR "/%04d%02d%02d-%02d%02d%02d.csv", now.year, now.month,
+    snprintf(s->log_path, sizeof s->log_path, BAT_LOG_DIR "/%04d%02d%02d-%02d%02d%02d.csv", now.year, now.month,
              now.day, now.hour, now.minute, now.second);
     char head[160];
     batlog_header(head, sizeof head, mode, device_model_name(platform_model()), iso);
@@ -492,7 +494,7 @@ void battery_action(App *a, Action act) {
         else if (c == BC_ABORT) test_stop(a, 1);
         else if (c == BC_DELETE && s->sel < s->count) {
             char p[160];
-            snprintf(p, sizeof p, BAT_DIR "/%s", s->names[s->sel]);
+            snprintf(p, sizeof p, BAT_LOG_DIR "/%s", s->names[s->sel]);
             remove(p);
             load_results(s);
             if (s->sel >= s->count) s->sel = s->count ? s->count - 1 : 0;
@@ -555,7 +557,7 @@ void battery_startup_check(App *a) {
     int n = list_logs(names, BAT_KEEP);
     for (int i = 0; i < n; i++) {
         char p[160];
-        snprintf(p, sizeof p, BAT_DIR "/%s", names[i]);
+        snprintf(p, sizeof p, BAT_LOG_DIR "/%s", names[i]);
         char *t = read_file(p);
         if (!t) continue;
         int open = strstr(t, "# end") == NULL && strncmp(t, "# nemo-battery", 14) == 0;

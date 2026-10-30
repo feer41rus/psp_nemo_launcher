@@ -1,3 +1,71 @@
+# 1.3.12 — Battery and Bluetooth
+- The battery icon has four cells of 25 %. While charging the cell of the current level blinks: red under 10 %, green from 90 %, grey between. Fully charged — all cells green, no blinking. On battery under 10 % — the icon is red.
+- PSP Go: Network › Bluetooth — whether Bluetooth is on, what is connected and the paired devices (view only for now). While a device is connected a Bluetooth icon appears at the top and R moves aside.
+- The detailed log on a PSP Go records where the console keeps Bluetooth (for the next version) and the battery icon's changes.
+
+# 1.3.11 — Music with the screen off
+- In listening mode (screen off) plain L / R switch tracks as well as SELECT+L / SELECT+R — the screen stays off.
+- When music plays and the note appears at the top, the tab strip shortens smoothly and the R glyph slides left — nothing runs under the icons.
+- The "Low on space" badge is a little more translucent.
+
+# 1.3.10 — Low on space
+- Home shows a "Low on space" badge with the free space under the clock, Wi‑Fi and battery when the card has under 1 GB or under 10 % free; under 200 MB the badge is red. Its background is translucent — the game's artwork shows through a little.
+- On a PSP Go the badge lists both storages: Internal and M2 card.
+- The badge can be turned off: Settings › System › Nemo › Warn when space runs low (on by default).
+- The Wi‑Fi icon and the FTP pill at the top sit on the bar's middle, level with the clock and battery.
+
+# 1.3.9 — Small improvements
+- The battery icon at the top right sits exactly on the bar's middle, level with the clock's and percentage's digits.
+- The battery percentage next to the icon can be hidden: Settings › System › Nemo › Battery percentage.
+- "Delete game" right in the Triangle menu on Home and in the Library — the same "delete forever?" question, without opening the game card.
+- "Screen brightness" (4 levels, a drop-down) is now right in Settings › System — it used to hide in Power saving.
+
+# 1.3.8 — Library background
+- The Library has a background under a matte coat — shelf and game titles stay readable on any picture. Six Nemo pictures about choice and possibility: Branching lives, The platform, Three lives, Leaf in the wind, Mars 2092, The League.
+- Your own background: Organizer › Gallery, Triangle › "Set as Library background" — Nemo cuts the picture to the screen and adds the matte coat itself.
+- The choice — Settings › System › Nemo › Library background (six pictures and Your own).
+- The battery icon at the top right has rounded corners, like the rest of the interface.
+- Settings with more than two values (date format, brightness, screen off, auto sleep, ARK options and others) now open a drop-down list; Left/Right still step through the values.
+
+# 1.3.7 — Full-screen Now Playing
+- Now Playing opens full screen: no tab bar, a bigger cover, the time and battery in the corner.
+- L / R switch tracks here (previous / next) instead of tabs; SELECT+L / SELECT+R work as before. Circle — back to the library.
+
+# 1.3.6 — Camera
+- "Organizer › Camera" for the Go!Cam (PSP-450): a full-screen viewfinder (lens toward you — like a mirror), music paused meanwhile.
+- Cross — a 640×480 photo (PICTURE/Camera) or start/stop a 480×272 video with the microphone's sound (VIDEO/Camera); Triangle — photo or video; Square — 3 or 10 s timer; L/R — zoom; SELECT — filter: Film, B&W, Sepia, Cold, Warm (viewfinder and photos).
+- File names by the date and time taken. No camera — "Connect the camera", Cross to retry.
+
+# 1.3.5 — UMD Music
+- A UMD Music disc is the album "UMD: title" at the end of Music, tracks "Track 1", "Track 2"…; it plays like any music (pause, seeking, queue, screen off).
+- Insert the disc — the notice "UMD Music · title", START listens from the first track (Now Playing). Take it out — the album leaves Music.
+- Video and disc music one at a time: opening Video stops the UMD track.
+
+# 1.3.4 — UMD Video: titles and sound
+- In the UMD Video player Triangle has new rows: "Title" (the disc's film, trailers, extras — Left/Right to choose, Cross to watch) and "Sound" (the disc's audio tracks when there are several — switched at once).
+- The chosen track is kept together with the place you stopped.
+
+# 1.3.3 — Video
+- "Organizer › Video": the videos of the VIDEO folder full screen, music paused meanwhile. MP4 films made for the PSP (H.264 Baseline/Main up to 480×272, AAC sound) in hardware; camera video — AVI and MOV with Motion JPEG (PCM, mu-law, IMA ADPCM, AAC sound).
+- UMD Video discs: insert one — "UMD Video · title", START plays the film in Nemo's player; the disc is the first row of Video, the place you stopped is kept. Cross — pause, Left/Right — 10 s, L/R — a minute, Triangle — info and subtitles, Circle — back.
+- "Continue from where you left off or start over?" — Nemo remembers where you stopped; a video watched to the end starts over.
+- Subtitles .srt and .ass next to the video (Cyrillic — UTF-8 and Windows-1251): track, size, background, height; SELECT+Left/Right — shift by 0.1 s.
+- An unsupported file gets a clear message: format, codec and why.
+- "Settings › System › Debug › Detailed log" (off by default) — for beta testing: the console's passport at start, every press and screen, setting changes, game launches, video, power, a snapshot each minute; after an error Nemo suggests turning it on.
+- The logs of Nemo, Control Center and the battery test now live in "PSP/NEMO/logs" (old ones moved there).
+
+# 1.3.2 — Organizer and file manager
+- The Photos tab became the Organizer: rows "Gallery" (the former Photos), "File manager", "Video" and "Camera" (the last two coming soon). Switch — "Show Organizer".
+- File manager: the memory card's folders (on a PSP Go the internal storage too, Left/Right). Square marks, Triangle — copy, move, paste, delete, rename, new folder. Copying shows progress, Circle cancels; music keeps playing. ARK, SEPLUGINS and PSP/NEMO folders change only after a second question.
+- Pictures open straight from the file manager (Cross) — full screen as in the Gallery: Left/Right browse that folder's pictures, Circle goes back.
+- Text editor for configs (json, txt, ini…): Square edits a line with the keyboard (now with symbols), Triangle — save (asks first), find, add or delete a line; START — find next.
+
+# 1.3.1 — Photos
+- Photos tab (before Music) — a separate window opened with Cross; game artwork is unloaded meanwhile, music keeps playing: every picture on the card as thumbnails — game screenshots, Nemo screenshots, camera shots, uploads. Cross opens it full screen: Left/Right browse, R/L zoom in/out, Square rotates (saved into the file), Triangle — rotate left, delete, info. Large photos rotate in parts — with a question and a waiting screen.
+- Screenshots in one place: games — "PICTURE/Nemo/Games", Nemo — "PICTURE/Nemo/Screenshots" (old ones moved).
+- Faster start: Home first, the music library is read after it.
+- The tab strip scrolls; switch "Show Photos" — Settings › System › Nemo.
+
 # 1.2.6 — Memory
 - "Settings › About PSP › Memory": free space on the card; "What uses the space" — on request Nemo counts how much games, DLC, saves, music, photos and video take; "Details" — the card's file system, cluster size, RAM and system flash. On a PSP Go the internal storage comes first (←→ — the card).
 

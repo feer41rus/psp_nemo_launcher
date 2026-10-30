@@ -53,6 +53,12 @@ psp: xmblang $(if $(filter 0,$(CC_PLUGIN)),,cc)
 	python3 tools/bin2c.py assets/nemo_logo.png build/psp/gen/nemo_logo.c nemo_logo
 	python3 tools/bin2c.py assets/splash_c.png build/psp/gen/splash_c.c splash_c
 	python3 tools/bin2c.py assets/splash_ncl.png build/psp/gen/splash_ncl.c splash_ncl
+	python3 tools/bin2c.py assets/backgrounds/branches.jpg build/psp/gen/bg_branches.c bg_branches
+	python3 tools/bin2c.py assets/backgrounds/rails.jpg build/psp/gen/bg_rails.c bg_rails
+	python3 tools/bin2c.py assets/backgrounds/three_lives.jpg build/psp/gen/bg_three_lives.c bg_three_lives
+	python3 tools/bin2c.py assets/backgrounds/particles.jpg build/psp/gen/bg_particles.c bg_particles
+	python3 tools/bin2c.py assets/backgrounds/mars.jpg build/psp/gen/bg_mars.c bg_mars
+	python3 tools/bin2c.py assets/backgrounds/grid.jpg build/psp/gen/bg_grid.c bg_grid
 	$(if $(filter 0,$(CC_PLUGIN)),,python3 tools/bin2c.py build/cc/nemo_cc.prx build/psp/gen/nemo_cc.c nemo_cc)
 	python3 tools/bin2c.py assets/testers.txt build/psp/gen/testers_txt.c testers_txt
 	python3 tools/bin2c.py assets/changelog_ru.txt build/psp/gen/changelog_ru.c changelog_ru

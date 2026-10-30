@@ -45,14 +45,25 @@ static const Row PW_SYMBOLS[3] = {
     { "'","\"",",",".","<",">","/","?","`","~",NULL },
 };
 
+// Full mode: the letters of TEXT, the symbols of PASSWORD.
+static const Row FULL_SPECIAL[2] = {
+    { "SHIFT", "SPACE", "DEL", "LANG", "SYMBOLS", "DONE", NULL },
+    { "SHIFT", "SPACE", "DEL", "LANG", "LETTERS", "DONE", NULL },
+};
+
+static size_t text_cap(const Osk *o) { return o->mode == OSK_MODE_FULL ? OSK_TEXT_MAX : OSK_NAME_MAX; }
+
 static const char *const *row_keys(const Osk *o, int row) {
     if (row == 0) return DIGITS;
-    if (o->mode == OSK_MODE_PASSWORD) {
+    if (o->mode == OSK_MODE_FULL) {
+        if (row == OSK_ROWS - 1) return FULL_SPECIAL[o->page];
+        if (o->page) return PW_SYMBOLS[row - 1];
+    } else if (o->mode == OSK_MODE_PASSWORD) {
         if (row == OSK_ROWS - 1) return PW_SPECIAL[o->page];
         if (o->page) return PW_SYMBOLS[row - 1];
         return PW_LETTERS[(o->shift || o->hold) ? 1 : 0][row - 1];
     }
-    if (row == OSK_ROWS - 1) return SPECIAL;
+    if (row == OSK_ROWS - 1 && o->mode != OSK_MODE_FULL) return SPECIAL;
     return LETTERS[o->layout ? 1 : 0][(o->shift || o->hold) ? 1 : 0][row - 1];
 }
 
@@ -73,9 +84,9 @@ const char *osk_key(const Osk *o, int row, int col) {
 
 void osk_init_mode(Osk *o, const char *initial, OskMode mode) {
     memset(o, 0, sizeof *o);
-    utf8_copy(o->text, sizeof o->text, initial ? initial : "");
-    o->row = 1;
     o->mode = mode;
+    utf8_copy(o->text, text_cap(o), initial ? initial : "");
+    o->row = 1;
 }
 
 void osk_init(Osk *o, const char *initial) { osk_init_mode(o, initial, OSK_MODE_TEXT); }
@@ -100,7 +111,7 @@ static int map_col(int col, int from_cols, int to_cols) {
 
 static void append(Osk *o, const char *s) {
     size_t have = strlen(o->text), add = strlen(s);
-    if (have + add > sizeof o->text - 1) return;   // never split a letter
+    if (have + add > text_cap(o) - 1) return;   // never split a letter
     if (o->max_len > 0 && have + add > (size_t)o->max_len) return;
     memcpy(o->text + have, s, add + 1);
 }
@@ -120,7 +131,7 @@ int osk_can_finish(const Osk *o) {
         int len = (int)strlen(o->text);
         return len >= o->min_len && (o->max_len <= 0 || len <= o->max_len);
     }
-    return !is_blank(o->text);
+    return o->mode == OSK_MODE_FULL || !is_blank(o->text);   // an editor line may be empty
 }
 
 static OskState press(Osk *o) {

@@ -99,7 +99,12 @@ const char *platform_fw(void) {
 }
 
 void platform_log_memory(const char *tag) {
-    log_msg("mem[%s]: free %u KB, max block %u KB", tag, (unsigned)(sceKernelTotalFreeMemSize() / 1024),
+    // The same measure as "perf:"/"screen:" lines and the debug box (Nemo's heap + kernel free); the
+    // kernel-only numbers stay for reference (Nemo holds most of the memory in its heap).
+    uint32_t free_b, total_b;
+    platform_memory(&free_b, &total_b);
+    log_msg("mem[%s]: ram_free=%uKB ram_total=%uKB (kernel free %u KB, max block %u KB)", tag,
+            (unsigned)(free_b / 1024), (unsigned)(total_b / 1024), (unsigned)(sceKernelTotalFreeMemSize() / 1024),
             (unsigned)(sceKernelMaxFreeMemSize() / 1024));
 }
 

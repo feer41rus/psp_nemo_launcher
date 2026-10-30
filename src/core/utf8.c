@@ -50,3 +50,31 @@ int utf8_casecmp(const char *a, const char *b) {
     }
     return (*x != 0) - (*y != 0);
 }
+
+size_t utf8_next(const char *s) {
+    if (!*s) return 0;
+    const unsigned char *p = (const unsigned char *)s;
+    next_cp(&p);
+    return (size_t)(p - (const unsigned char *)s);
+}
+
+// Does needle match at x (folded)?
+static int match_at(const unsigned char *x, const unsigned char *y) {
+    while (*y) {
+        if (!*x || fold(next_cp(&x)) != fold(next_cp(&y))) return 0;
+    }
+    return 1;
+}
+
+int utf8_casefind(const char *hay, const char *needle) {
+    if (!*needle) return -1;
+    for (const char *h = hay; *h; h += utf8_next(h))
+        if (match_at((const unsigned char *)h, (const unsigned char *)needle)) return (int)(h - hay);
+    return -1;
+}
+
+size_t utf8_len(const char *s) {
+    size_t n = 0;
+    for (size_t k; (k = utf8_next(s)) > 0; s += k) n++;
+    return n;
+}

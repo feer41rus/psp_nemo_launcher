@@ -5,9 +5,11 @@
 
 typedef enum { OSK_EDITING, OSK_DONE, OSK_CANCEL } OskState;
 // TEXT: RU/EN letters (folders, playlists). PASSWORD: ASCII only, letters page + symbols page.
-typedef enum { OSK_MODE_TEXT, OSK_MODE_PASSWORD } OskMode;
+// FULL (1.3.2, editor lines): RU/EN letters + symbols page, long text, an empty line may be finished.
+typedef enum { OSK_MODE_TEXT, OSK_MODE_PASSWORD, OSK_MODE_FULL } OskMode;
 
-#define OSK_TEXT_MAX 64
+#define OSK_TEXT_MAX 512   // the buffer; FULL may fill it
+#define OSK_NAME_MAX 64    // TEXT and PASSWORD keep to this (names, passwords)
 
 // On-screen keyboard model: digits row, three letter rows (RU or EN), special row.
 typedef struct {

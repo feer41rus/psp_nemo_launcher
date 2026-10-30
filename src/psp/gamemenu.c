@@ -52,6 +52,23 @@ void gamemenu_open(App *a) {
     a->gm_open = 1;
     a->gm_sel = 0;
     a->gm_mode = GM_MENU;
+    a->gm_quick = 0;
+}
+
+static int ask_delete(App *a, const Game *g) {
+    GameTarget t[GAME_MAX_DISCS];
+    if (game_delete_targets(g, t, GAME_MAX_DISCS) < 0) { ui_toast(a, tr(S_GM_DEL_REFUSED)); return 0; }
+    a->gm_mode = GM_DELETE_Q;
+    a->gm_yes = 0;                            // "No" first: deleting is not undoable
+    return 1;
+}
+
+void gamemenu_ask_delete(App *a) {
+    const Game *g = card_game(a);
+    a->gm_open = 0;
+    if (!g || !ask_delete(a, g)) return;
+    a->gm_open = 1;
+    a->gm_quick = 1;
 }
 
 static int clock_index(const App *a, const Game *g) {
@@ -61,7 +78,7 @@ static int clock_index(const App *a, const Game *g) {
 }
 
 static void set_clock(App *a, const Game *g, int index) {
-    if (!a->ark_text) { ui_toast(a, tr(S_ST_ARK_READ_FAILED)); return; }
+    if (!a->ark_text) { ui_fail(a, S_ST_ARK_READ_FAILED); return; }
     char *next = arkclock_game_set(a->ark_text, g->disc_id, ARK_CLOCKS[index]);
     if (!next) return;
     int rc = platform_ark_write_text(next);
@@ -72,7 +89,7 @@ static void set_clock(App *a, const Game *g, int index) {
         ui_toast(a, tr(S_ST_APPLY_RESTART));
     } else {
         free(next);
-        ui_toast(a, tr(S_ST_REG_FAILED));
+        ui_fail(a, S_ST_REG_FAILED);
     }
 }
 
@@ -134,15 +151,18 @@ static void dlc_run(App *a, const Game *g) {
     game_dir_of(g, game_dir, sizeof game_dir);
     manifest_of(g, man, sizeof man);
     sceIoMkdir("ms0:/PSP/NEMO/dlc", 0777);
+    uint32_t t0 = platform_ms();
     int n = dlc_install(dlc_packs, dlc_count, DLC_ROOT, game_dir, g->disc_id, man, g->title, dlc_progress, NULL);
     log_msg("dlc: install into %s: %d of %d packs", game_dir, n, dlc_usable);
+    log_time("dlc_install", platform_ms() - t0);
     a->gm_open = 0;
     a->card_dlc = dlc_installed(game_dir);
     char msg[96];
     int skipped = dlc_count - dlc_usable;   // encrypted ones stay in install_dlc
     if (n > 0 && skipped > 0) snprintf(msg, sizeof msg, tr(S_DLC_DONE_SKIP_FMT), n, skipped);
     else if (n > 0) snprintf(msg, sizeof msg, tr(S_DLC_DONE_FMT), n);
-    ui_toast(a, n > 0 ? msg : tr(S_DLC_FAIL));
+    if (n > 0) ui_toast(a, msg);
+    else ui_fail(a, S_DLC_FAIL);
 }
 
 static int yes_no(App *a, Action act) {       // 1 yes, 0 no, -1 still asking
@@ -167,7 +187,10 @@ void gamemenu_action(App *a, Action act) {
         return;
     case GM_DELETE_Q: {
         int r = yes_no(a, act);
-        if (r == 0) a->gm_mode = GM_MENU;
+        if (r == 0 && a->gm_quick) {          // asked from the shelves: back to them, not to the card
+            a->gm_open = 0;
+            nav_pop(&a->nav);
+        } else if (r == 0) a->gm_mode = GM_MENU;
         else if (r == 1) {
             if (g->disc_id[0]) { a->gm_mode = GM_SAVES_Q; a->gm_yes = 0; }
             else delete_game(a, g, 0);
@@ -253,10 +276,7 @@ void gamemenu_action(App *a, Action act) {
             a->gm_pick = clock_index(a, g);
             a->gm_mode = GM_CLOCK;
         } else {
-            GameTarget t[GAME_MAX_DISCS];
-            if (game_delete_targets(g, t, GAME_MAX_DISCS) < 0) { ui_toast(a, tr(S_GM_DEL_REFUSED)); return; }
-            a->gm_mode = GM_DELETE_Q;
-            a->gm_yes = 0;                    // "No" first: deleting is not undoable
+            ask_delete(a, g);
         }
     }
 }

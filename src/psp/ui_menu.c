@@ -1,4 +1,5 @@
 #include "ui.h"
+#include "utf8.h"
 #include "gfx.h"
 #include <stdio.h>
 #include <string.h>
@@ -12,6 +13,7 @@ static const StrId MENU_LABELS[] = {
     [MI_DETAILS] = S_MENU_DETAILS,
     [MI_RENAME_FOLDER] = S_MENU_RENAME_FOLDER,
     [MI_DELETE_FOLDER] = S_MENU_DELETE_FOLDER,
+    [MI_DELETE_GAME] = S_GM_DELETE,
 };
 
 static int top_sel(const App *app) {
@@ -42,7 +44,7 @@ void ui_menu_draw(const App *app) {
     int sel = top_sel(app);
     for (int i = 0; i < app->menu_count; i++, y += ROW_H) {
         row_bg(x, y, i == sel);
-        uint32_t col = app->menu[i] == MI_DELETE_FOLDER ? 0xff8a8aff : COL_TEXT;
+        uint32_t col = app->menu[i] == MI_DELETE_FOLDER || app->menu[i] == MI_DELETE_GAME ? 0xff8a8aff : COL_TEXT;
         gfx_text(FONT_BODY, x + 16, y + 3, col, tr(MENU_LABELS[app->menu[i]]));
     }
 }
@@ -116,7 +118,11 @@ void ui_osk_draw(const App *app) {
     gfx_round_rect(8, top, SCREEN_W - 16, CONTENT_H - 12, 10, 0x1a2230ff);
     StrId tid = app->osk_purpose == OSK_FOR_RENAME ? S_OSK_TITLE_RENAME
               : app->osk_purpose == OSK_FOR_NEW_FOLDER ? S_OSK_TITLE_NEW
-              : app->osk_purpose == OSK_FOR_NICKNAME ? S_ST_NICK_TITLE : S_MUSIC_PLAYLIST_NAME;
+              : app->osk_purpose == OSK_FOR_NICKNAME ? S_ST_NICK_TITLE
+              : app->osk_purpose == OSK_FOR_FILE_RENAME ? S_FM_RENAME
+              : app->osk_purpose == OSK_FOR_NEW_DIR ? S_FM_NEWDIR
+              : app->osk_purpose == OSK_FOR_EDIT_LINE ? S_HINT_EDIT
+              : app->osk_purpose == OSK_FOR_FIND ? S_ED_FIND : S_MUSIC_PLAYLIST_NAME;
     char title[96];
     if (app->osk_purpose == OSK_FOR_WIFI_PASSWORD) snprintf(title, sizeof title, tr(S_NET_PASSWORD_FOR), app->net_target.ssid);
     else snprintf(title, sizeof title, "%s", tr(tid));
@@ -138,8 +144,10 @@ void ui_osk_draw(const App *app) {
         snprintf(shown, sizeof shown, "%s", o->text);
     }
     gfx_round_rect(18, top + 22, SCREEN_W - 36, 24, 6, 0x0e131bff);
-    gfx_text_fit(FONT_BODY, 26, top + 25, SCREEN_W - 60, COL_TEXT, shown);
-    int tw = gfx_text_width(FONT_BODY, shown);
+    const char *tail = shown;   // a long line (editor): its end, where the caret is
+    while (*tail && gfx_text_width(FONT_BODY, tail) > SCREEN_W - 60) tail += utf8_next(tail);
+    gfx_text_fit(FONT_BODY, 26, top + 25, SCREEN_W - 60, COL_TEXT, tail);
+    int tw = gfx_text_width(FONT_BODY, tail);
     if (tw > SCREEN_W - 60) tw = SCREEN_W - 60;
     if ((app->now_ms / 500) % 2 == 0) gfx_rect(27 + tw, top + 27, 2, 15, COL_ACCENT);
 

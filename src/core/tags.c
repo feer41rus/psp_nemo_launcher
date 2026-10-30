@@ -70,7 +70,7 @@ static const uint16_t CP1251_80_BF[64] = {
     0x0451, 0x2116, 0x0454, 0x00BB, 0x0458, 0x0405, 0x0455, 0x0457,
 };
 
-static uint32_t cp1251_to_unicode(uint8_t c) {
+uint32_t cp1251_to_unicode(uint8_t c) {
     if (c < 0x80) return c;
     if (c >= 0xC0) return 0x0410 + (c - 0xC0);
     return CP1251_80_BF[c - 0x80];

@@ -6,7 +6,7 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CC_LOG "ms0:/PSP/NEMO/cc.log"
+#define CC_LOG "ms0:/PSP/NEMO/logs/cc.log"   // 1.3.3: with Nemo's logs (Nemo makes the folder)
 #define CC_LOG_MAX (64 * 1024)
 
 typedef struct { char *buf; int len, cap; } Out;

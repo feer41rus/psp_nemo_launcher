@@ -116,6 +116,8 @@ MusicCmd mnav_handle(MusicNav *n, Action a, const MusicModel *m) {
             mnav_push(n, MS_MENU);
             return cmd(MC_OPEN_MENU, 0, 2);   // dir 2 = opened from Now Playing
         }
+        // 1.3.7: full screen, so L/R are free: previous / next track from any focus.
+        if (a == ACT_TAB_PREV || a == ACT_TAB_NEXT) return cmd(MC_NP_BUTTON, a == ACT_TAB_PREV ? NP_PREV : NP_NEXT, 0);
         if (n->np_focus == NP_PROGRESS) {
             if (a == ACT_LEFT || a == ACT_RIGHT) return cmd(MC_SEEK, 0, a == ACT_LEFT ? -1 : 1);
             if (a == ACT_DOWN) n->np_focus = n->np_last_button;

@@ -50,8 +50,10 @@ static void shuffle_icon(int cx, int cy, uint32_t col) {
 }
 
 void ui_nowplaying_draw(App *a) {
+    // 1.3.7: full screen — no tab bar, only the clock and battery in the corner.
+    int top = music_fullscreen(a) ? 0 : CONTENT_Y, h = SCREEN_H - HINT_BAR_H - top;
     int cur = queue_current(&a->queue);
-    gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, COL_BG);
+    gfx_rect(0, top, SCREEN_W, h, COL_BG);
     if (cur < 0) {
         const char *t = tr(S_MUSIC_NONE);
         gfx_text(FONT_TITLE, (SCREEN_W - gfx_text_width(FONT_TITLE, t)) / 2, 120, COL_TEXT, t);
@@ -60,14 +62,15 @@ void ui_nowplaying_draw(App *a) {
     const Track *t = &a->mlib.tracks[cur];
     int album = ui_music_album_of(&a->mlib, cur);
     // Background: soft glow in the album colour behind the cover.
-    gfx_gradient_h(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x3a1f5aff, 0x0e131bff);
-    gfx_gradient_v(0, CONTENT_Y + CONTENT_H - 60, SCREEN_W, 60, 0x0e131b00, 0x0e131bd0);
+    gfx_gradient_h(0, top, SCREEN_W, h, 0x3a1f5aff, 0x0e131bff);
+    gfx_gradient_v(0, top + h - 60, SCREEN_W, 60, 0x0e131b00, 0x0e131bd0);
+    if (!top) ui_clock_draw(a);
 
-    int cs = 140, cx = 18, cy = CONTENT_Y + (CONTENT_H - cs) / 2;
+    int cs = top ? 140 : 160, cx = 18, cy = top + (h - cs) / 2;
     gfx_rect(cx + 4, cy + 6, cs, cs, 0x00000060);   // shadow
     ui_music_cover(a, album, cx, cy, cs);
 
-    int x = cx + cs + 18, w = SCREEN_W - x - 14, y = CONTENT_Y + 18;
+    int x = cx + cs + 18, w = SCREEN_W - x - 14, y = top ? top + 18 : 32;
     char head[96], nofm[48];
     snprintf(nofm, sizeof nofm, tr(S_MUSIC_N_OF_M), a->queue.pos + 1, a->queue.count);
     snprintf(head, sizeof head, "%s · %s", tr(S_MUSIC_NOW_PLAYING), nofm);
@@ -306,11 +309,24 @@ static void draw_listen(const App *a) {
     gfx_text(FONT_SMALL, 134, y, COL_MUTED, tr(S_LISTEN_PAUSE));
     gfx_button_glyph(GLYPH_NOTE, 120, y + 25, 14);
     gfx_text(FONT_SMALL, 134, y + 18, COL_MUTED, tr(S_LISTEN_TRACKS));
-    gfx_text_fit(FONT_SMALL, 60, y + 40, SCREEN_W - 120, 0x4a5566ff, tr(S_LISTEN_WAKE));
+    gfx_text(FONT_SMALL, 120, y + 36, COL_MUTED, tr(S_LISTEN_LR));   // 1.3.11: without ♪ / SELECT too
+    gfx_text_fit(FONT_SMALL, 60, y + 58, SCREEN_W - 120, 0x4a5566ff, tr(S_LISTEN_WAKE));
     (void)a;
 }
 
+// Full-screen Now Playing has no tab bar: overlays shade the strip it used to cover too.
+static void shade_top(const App *a, uint32_t col) {
+    if (music_fullscreen(a)) gfx_rect(0, 0, SCREEN_W, CONTENT_Y, col);
+}
+
 void ui_music_overlays_draw(App *a) {
+    switch (mnav_top(&a->mnav)) {
+    case MS_MENU: case MS_QUEUE: case MS_PICK: shade_top(a, 0x00000080); break;
+    case MS_CONFIRM: shade_top(a, a->mconfirm == 1 ? COL_BG : 0x000000a0); break;
+    case MS_EQ: shade_top(a, COL_BG); break;
+    case MS_OSK: shade_top(a, 0x000000a0); break;
+    default: break;
+    }
     switch (mnav_top(&a->mnav)) {
     case MS_MENU: draw_menu(a); break;
     case MS_QUEUE: draw_queue(a); break;
@@ -337,8 +353,9 @@ void music_draw_hints(const App *a) {
         // The cursor makes per-button hints unnecessary; on the progress bar ←/→ seek.
         StrId first = a->mnav.np_focus == NP_PROGRESS ? S_HINT_SEEK : S_HINT_SELECT;
         Hint h[] = { { a->mnav.np_focus == NP_PROGRESS ? ACT_LEFT : ACT_CONFIRM, first },
+                     { ACT_TAB_PREV, S_HINT_PREV_TRACK }, { ACT_TAB_NEXT, S_HINT_NEXT_TRACK },
                      { ACT_MENU, S_HINT_MENU }, { ACT_BACK, S_HINT_BACK }, { ACT_SELECT, S_HINT_SCREEN_OFF } };
-        ui_hints_draw(a, h, 4);
+        ui_hints_draw(a, h, 6);
         break;
     }
     case MS_QUEUE: {

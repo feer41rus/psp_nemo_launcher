@@ -21,6 +21,7 @@ static StrId section_label(NetSection s) {
     case NS_FTP: return S_NET_FTP;
     case NS_USB: return S_NET_USB;
     case NS_WPA2: return S_NET_WPA2;
+    case NS_BT: return S_NET_BT;
     default: return S_NET_USBNET;
     }
 }
@@ -305,6 +306,36 @@ static void draw_soon(StrId title, StrId desc) {
     text_wrap(FONT_SMALL, PANEL_X + 10, y + 28, PANEL_W - 20, COL_MUTED, tr(desc), 2);
 }
 
+// PSP Go Bluetooth (1.3.12): the state as read from the registry, shown only; switching stays in the XMB.
+static void info_row(int y, StrId label, const char *value, uint32_t col) {
+    gfx_round_rect(PANEL_X, y, PANEL_W, 26, 7, COL_PANEL);
+    gfx_text_fit(FONT_BODY, PANEL_X + 10, y + 4, PANEL_W / 2, COL_TEXT, tr(label));
+    int vw = gfx_text_width(FONT_BOLD, value), max = PANEL_W / 2 - 10;
+    gfx_text_fit(FONT_BOLD, PANEL_X + PANEL_W - 10 - (vw < max ? vw : max), y + 4, max, col, value);
+}
+
+static void draw_bt(const App *a) {
+    const BtState *b = &a->bt;
+    int y = CONTENT_Y + 8;
+    const char *st = tr(b->enabled == 1 ? S_BT_ON : b->enabled == 0 ? S_BT_OFF : S_BT_UNKNOWN);
+    info_row(y, S_NET_BT, st, b->enabled == 1 ? COL_OK : COL_MUTED);
+    y += 30;
+    const char *con = b->connected == 1 ? (b->connected_name[0] ? b->connected_name : tr(S_BT_YES))
+                    : b->connected == 0 ? tr(S_BT_NONE) : tr(S_BT_UNKNOWN);
+    info_row(y, S_BT_CONNECTED, con, b->connected == 1 ? COL_ACCENT : COL_MUTED);
+    y += 30;
+    char paired[200] = { 0 };
+    for (int i = 0; i < b->paired; i++) {
+        strncat(paired, i ? ", " : "", sizeof paired - strlen(paired) - 1);
+        strncat(paired, b->paired_names[i], sizeof paired - strlen(paired) - 1);
+    }
+    gfx_text(FONT_SMALL, PANEL_X + 4, y, COL_MUTED, tr(S_BT_PAIRED));
+    y += 15;
+    y += text_wrap(FONT_SMALL, PANEL_X + 4, y, PANEL_W - 8, COL_TEXT, paired[0] ? paired : tr(S_BT_PAIRED_NONE), 2) + 8;
+    y += text_wrap(FONT_SMALL, PANEL_X + 4, y, PANEL_W - 8, COL_MUTED, tr(S_BT_NOTE), 3) + 6;
+    if (!b->found) text_wrap(FONT_SMALL, PANEL_X + 4, y, PANEL_W - 8, COL_WARN, tr(S_BT_UNKNOWN_NOTE), 4);
+}
+
 static void draw_menu(const App *a) {
     gfx_rect(0, CONTENT_Y, SCREEN_W, CONTENT_H, 0x00000080);
     int w = 220, h = 34 + 2 * 24 + 8, x = SCREEN_W - w - 12, y = CONTENT_Y + (CONTENT_H - h) / 2;
@@ -342,6 +373,7 @@ void ui_network_draw(App *a) {
     case NS_FTP: draw_ftp(a); break;
     case NS_USB: draw_usb(a); break;
     case NS_USBNET: draw_soon(S_NET_USBNET, S_NET_SOON_13); break;
+    case NS_BT: draw_bt(a); break;
     }
     switch (a->net_screen) {
     case NETS_OSK: ui_osk_draw(a); break;
